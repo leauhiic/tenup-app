@@ -28,7 +28,7 @@ function App() {
   // 🔄 tri
   const sorted = [...filtered].sort((a, b) => {
     if (tri === "points") return b.Point - a.Point;
-    if (tri === "date") return new Date(b["Date tournoi"]) - new Date(a["Date tournoi"]);
+    if (tri === "date") return new Date(b.Date) - new Date(a.Date);
     return 0;
   });
 
