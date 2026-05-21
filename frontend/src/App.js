@@ -32,10 +32,17 @@ function App() {
     return 0;
   });
 
-  const totalPoints = tournois.reduce(
-    (sum, t) => sum + (t.Point || 0),
-    0
-  );
+
+const meilleurs = [...sorted]
+  .sort((a, b) => b.Point - a.Point)
+  .slice(0, 12);
+
+// ✅ somme des 12 meilleurs
+const totalPoints = meilleurs.reduce(
+  (sum, t) => sum + (t.Point || 0),
+  0
+);
+
 
   
 return (
