@@ -5,11 +5,9 @@ const app = express();
 app.use(cors());
 
 app.get("/", (req, res) => {
-  res.send("✅ Backend OK (test)");
+  res.send("✅ Backend OK Railway fonctionne");
 });
 
-const PORT = process.env.PORT || 3000;
-
-app.listen(PORT, () => {
-  console.log(`✅ Serveur lancé sur ${PORT}`);
+app.listen(process.env.PORT || 3000, () => {
+  console.log("✅ Server started");
 });
