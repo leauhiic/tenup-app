@@ -66,6 +66,13 @@ const totalPoints = meilleurs.reduce(
   0
 );
 
+  
+// ✅ moyenne des 12 meilleurs
+const moyennePoints =
+  meilleurs.length > 0
+    ? Math.round(totalPoints / meilleurs.length)
+    : 0;
+
 
 // ✅ mois prochain
 const today = new Date();
@@ -121,6 +128,7 @@ return (
           title="Meilleur score"
           value={Math.max(...sorted.map((t) => t.Point || 0), 0)}
         />
+        <Card title="Moyenne (Top 12)" value={moyennePoints} />
       </div>
 
       {/* 🔹 tableau */}
