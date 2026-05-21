@@ -56,7 +56,7 @@ function App() {
               <td>{t.Catégorie}</td>
               <td>{t.Partenaire}</td>
               <td>{t.Classement}</td>
-              <td>{t.Validite}</td>
+              <td>{t.Validité}</td>
               <td style={{ fontWeight: "bold" }}>{t.Point}</td>
             </tr>
           ))}
