@@ -8,6 +8,18 @@ const puppeteer = require("puppeteer-core");
 const app = express();
 app.use(cors());
 
+const browser = await puppeteer.launch({
+  args: [
+    ...chromium.args,
+    "--no-sandbox",
+    "--disable-setuid-sandbox",
+    "--disable-dev-shm-usage",
+    "--disable-gpu"
+  ],
+  executablePath: await chromium.executablePath(),
+  headless: true,
+});
+
 
 const Tournois = [
   {
