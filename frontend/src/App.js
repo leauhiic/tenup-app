@@ -44,6 +44,20 @@ const totalPoints = meilleurs.reduce(
 );
 
 
+// ✅ mois prochain
+const today = new Date();
+const nextMonth = new Date(today.getFullYear(), today.getMonth() + 1);
+
+// format "mai-26"
+const moisSuivant = nextMonth.toLocaleDateString("fr-FR", {
+  month: "short",
+}).toLowerCase() + "-" + String(nextMonth.getFullYear()).slice(-2);
+
+// ✅ tournois qui expirent
+const tournoisPerdus = tournois.filter((t) =>
+  t["Validité"]?.toLowerCase().includes(moisSuivant)
+);
+
   
 return (
     <div style={{ padding: 20, fontFamily: "Arial" }}>
@@ -112,6 +126,36 @@ return (
           ))}
         </tbody>
       </table>
+          <h2 style={{ marginTop: 30 }}>⚠️ Tournois perdus le mois prochain</h2>
+          
+          {tournoisPerdus.length === 0 ? (
+            <p>Aucun tournoi ne sort du classement le mois prochain ✅</p>
+          ) : (
+            <table style={tableStyle}>
+              <thead>
+                <tr>
+                  <th>Date</th>
+                  <th>Nom</th>
+                  <th>Partenaire</th>
+                  <th>Points perdus</th>
+                  <th>Validité</th>
+                </tr>
+              </thead>
+              <tbody>
+                {tournoisPerdus.map((t, i) => (
+                  <tr key={i} style={{ background: "#ffe5e5" }}>
+                    <td>{t["Date tournoi"]}</td>
+                    <td>{t.Nom}</td>
+                    <td>{t.Partenaire}</td>
+                    <td style={{ fontWeight: "bold", color: "red" }}>
+                      {t.Point}
+                    </td>
+                    <td>{t["Validité"]}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
     </div>
   );
 }
