@@ -26,10 +26,7 @@ function App() {
   });
 
 
-const pointsPerdus = tournoisPerdus.reduce(
-  (sum, t) => sum + (t.Point || 0),
-  0
-);
+
   
 const parseDate = (dateStr) => {
   if (!dateStr) return new Date(0);
@@ -95,7 +92,10 @@ const tournoisPerdus = tournois.filter((t) =>
   t["Validité"]?.toLowerCase().includes(moisSuivant)
 );
 
-  
+  const pointsPerdus = tournoisPerdus.reduce(
+  (sum, t) => sum + (t.Point || 0),
+  0
+);
 return (
     <div style={{ padding: 20, fontFamily: "Arial" }}>
       <h1>🎾 TenUp Dashboard</h1>
