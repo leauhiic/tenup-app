@@ -14,15 +14,15 @@ app.get("/", (req, res) => {
 // ✅ Scraping classement padel
 app.get("/classement", async (req, res) => {
   try {
-    const url =
-      "https://tenup.fft.fr/classement/7146157482/padel";
+    const url = "https://tenup.fft.fr/classement/7146157482/padel";
 
-    const { data } = await axios.get(url);
-    const $ = cheerio.load(data);
+    const response = await axios.get(url);
+    const html = response.data;
+
+    const $ = cheerio.load(html);
 
     const joueurs = [];
 
-    // ⚠️ adapter selon structure réelle HTML
     $("tr").each((i, el) => {
       const cols = $(el).find("td");
 
@@ -33,7 +33,6 @@ app.get("/classement", async (req, res) => {
           points: $(cols[2]).text().trim(),
         };
 
-        // éviter les lignes vides
         if (joueur.nom) {
           joueurs.push(joueur);
         }
@@ -41,32 +40,15 @@ app.get("/classement", async (req, res) => {
     });
 
     res.json(joueurs);
-  } catch (err) {
-    console.error(err);
+  } catch (error) {
+    console.error("Erreur scraping :", error);
     res.status(500).json({ error: "Erreur scraping" });
   }
 });
 
-// ✅ Exemple : endpoint pour récupérer les top 10
-app.get("/top10", async (req, res) => {
-  try {
-    const url =
-      "https://tenup.fft.fr/classement/7146157482/padel";
+// ✅ Lancer serveur
+const PORT = process.env.PORT || 3000;
 
-    const { data } = await axios.get(url);
-    const $ = cheerio.load(data);
-
-    const joueurs = [];
-
-    $("tr").each((i, el) => {
-      const cols = $(el).find("td");
-
-      if (cols.length >= 3) {
-        joueurs.push({
-          classement: $(cols[0]).text().trim(),
-          nom: $(cols[1]).text().trim(),
-          points: $(cols[2]).text().trim(),
-        });
-      }
-    });
-
+app.listen(PORT, () => {
+  console.log(`✅ Backend lancé sur port ${PORT}`);
+});
