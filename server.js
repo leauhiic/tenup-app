@@ -1,4 +1,3 @@
-require("dotenv").config();
 const express = require("express");
 const axios = require("axios");
 const cors = require("cors");
@@ -6,18 +5,24 @@ const cors = require("cors");
 const app = express();
 app.use(cors());
 
-// 🔐 LOGIN (redirige vers TenUp)
+// 🔐 redirection login TenUp
 app.get("/login", (req, res) => {
-  const url = `https://api.fft.fr/oauth/authorize?response_type=token&client_id=${process.env.TENUP_CLIENT_ID}&redirect_uri=${process.env.REDIRECT_URI}`;
+  const url =
+    "https://api.fft.fr/oauth/authorize?response_type=token&client_id=tenup-mobile&redirect_uri=https://leauhiic-tenup-app-front.vercel.app/callback";
 
   res.redirect(url);
 });
 
-// 📊 Tournois
-app.get("/tournois", async (req, res) => {
-  const token = req.headers.authorization;
+// ✅ test backend
+app.get("/", (req, res) => {
+  res.send("✅ Backend TenUp OK");
+});
 
+// 📋 tournois
+app.get("/tournois", async (req, res) => {
   try {
+    const token = req.headers.authorization;
+
     const response = await axios.get(
       "https://api.fft.fr/fft/v1/competition/tournois",
       {
@@ -29,11 +34,13 @@ app.get("/tournois", async (req, res) => {
 
     res.json(response.data);
   } catch (err) {
-    res.status(500).json({ error: "Erreur TenUp" });
+    res.status(500).json({ error: "Erreur API TenUp" });
   }
 });
 
-app.listen(3000, () => console.log("✅ API prête"));
+app.listen(3000, () => {
+  console.log("✅ Backend prêt");
+});
 
 app.get("/", (req, res) => {
   res.send("✅ Backend TenUp OK");
