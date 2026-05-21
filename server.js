@@ -151,6 +151,31 @@ const Tournois = [
   }
 ];
 
+
+const db = require("./db");
+
+app.get("/init-db", async (req, res) => {
+  try {
+    await db.query(`
+      CREATE TABLE IF NOT EXISTS tournois (
+        id SERIAL PRIMARY KEY,
+        date TEXT,
+        nom TEXT,
+        categorie TEXT,
+        partenaire TEXT,
+        classement INTEGER,
+        point INTEGER,
+        validite TEXT
+      )
+    `);
+
+    res.send("✅ Table créée avec succès");
+  } catch (err) {
+    console.error(err);
+    res.status(500).send(err.message);
+  }
+});
+
 app.get("/", (req, res) => {
   res.send("✅ Backend connecté TenUp OK");
 });
@@ -162,59 +187,30 @@ app.get("/tournois", (req, res) => {
 });
 
 
+
 app.get("/tournois2", async (req, res) => {
   try {
-    const browser = await puppeteer.launch({
-      args: [
-        ...chromium.args,
-        "--no-sandbox",
-        "--disable-setuid-sandbox",
-        "--disable-dev-shm-usage",
-        "--disable-gpu"
-      ],
-      executablePath: await chromium.executablePath(),
-      headless: true,
-    });
+    const result = await db.query("SELECT * FROM tournois");
 
-    const page = await browser.newPage();
+    res.json(result.rows);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: err.message });
+  }
+});
 
-    await page.goto(
-      "https://tenup.fft.fr/classement/7146157482/padel",
-      { waitUntil: "networkidle2" }
+app.post("/tournois", async (req, res) => {
+  const { date, nom, categorie, partenaire, classement, point, validite } = req.body;
+
+  try {
+    await db.query(
+      `INSERT INTO tournois (date, nom, categorie, partenaire, classement, point, validite)
+       VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+      [date, nom, categorie, partenaire, classement, point, validite]
     );
 
-    await page.waitForSelector(".mes-competitions-container");
-
-    const data = await page.evaluate(() => {
-      const rows = document.querySelectorAll(
-        ".mes-competitions-container tbody tr"
-      );
-
-      const result = [];
-
-      rows.forEach((row) => {
-        const cols = row.querySelectorAll("td");
-
-        if (cols.length >= 7) {
-          result.push({
-            date: cols[0].innerText.trim(),
-            nom: cols[1].innerText.trim(),
-            categorie: cols[2].innerText.trim(),
-            partenaire: cols[4].innerText.trim(),
-            classement: cols[5].innerText.trim(),
-            points: cols[6].innerText.trim(),
-          });
-        }
-      });
-
-      return result;
-    });
-
-    await browser.close();
-
-    res.json(data);
+    res.send("✅ Tournoi ajouté");
   } catch (err) {
-    console.error("❌ ERREUR:", err.message);
     res.status(500).json({ error: err.message });
   }
 });
