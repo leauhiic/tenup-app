@@ -25,10 +25,21 @@ function App() {
     );
   });
 
+  
+const parseDate = (dateStr) => {
+  const [jour, mois, annee] = dateStr.split("/");
+  return new Date(`${annee}-${mois}-${jour}`);
+};
+
+  const [ordreAscendant, setOrdreAscendant] = useState(false);
+
   // 🔄 tri
   const sorted = [...filtered].sort((a, b) => {
     if (tri === "points") return b.Point - a.Point;
-    if (tri === "date") return b.Date - a.Date;
+    if (tri === "date") {
+      return parseDate(b.Date) - parseDate(a.Date);
+    return ordreAscendant ? -diff : diff;
+  }
     return 0;
   });
 
@@ -46,7 +57,7 @@ const totalPoints = meilleurs.reduce(
 
 // ✅ mois prochain
 const today = new Date();
-const nextMonth = new Date(today.getFullYear(), today.getMonth() + 1);
+const nextMonth = new Date(today.getFullYear(), today.getMonth());
 
 // format "mai-26"
 const moisSuivant = nextMonth.toLocaleDateString("fr-FR", {
@@ -82,6 +93,12 @@ return (
           <option value="date">Trier par date</option>
           <option value="points">Trier par points</option>
         </select>
+
+          
+<button onClick={() => setOrdreAscendant(!ordreAscendant)}>
+  🔄 Inverser ordre
+</button>
+
       </div>
 
       {/* 🔹 stats */}
