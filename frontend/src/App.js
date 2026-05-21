@@ -17,8 +17,11 @@ function App() {
   );
 
   return (
-    <div style={{ padding: 20, fontFamily: "Arial" }}>
-      <h1>🎾 TenUp Dashboard</h1>
+    
+    <div className="p-6 max-w-5xl mx-auto">
+      <h1 className="text-3xl font-bold mb-6">
+      🎾 TenUp Dashboard
+      </h1>
 
       {/* 🔹 Stats */}
       <div style={{ display: "flex", gap: 20, marginBottom: 20 }}>
@@ -33,7 +36,7 @@ function App() {
       </div>
 
       {/* 🔹 Tableau */}
-      <table style={tableStyle}>
+      <table className="w-full border rounded-xl overflow-hidden">
         <thead>
           <tr>
             <th>Date</th>
@@ -42,6 +45,7 @@ function App() {
             <th>Partenaire</th>
             <th>Classement</th>
             <th>Points</th>
+            <th>Validité</th>
           </tr>
         </thead>
         <tbody>
