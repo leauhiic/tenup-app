@@ -6,20 +6,25 @@ const cors = require("cors");
 const app = express();
 app.use(cors());
 
-// ✅ Test serveur
+// ✅ Test
 app.get("/", (req, res) => {
-  res.send("✅ Backend scraping TenUp OK");
+  res.send("✅ Backend TenUp scraping OK");
 });
 
-// ✅ Scraping classement padel
+// ✅ Scraping sécurisé
 app.get("/classement", async (req, res) => {
   try {
     const url = "https://tenup.fft.fr/classement/7146157482/padel";
 
-    const response = await axios.get(url);
-    const html = response.data;
+    const response = await axios.get(url, {
+      headers: {
+        "User-Agent":
+          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+      },
+      timeout: 10000,
+    });
 
-    const $ = cheerio.load(html);
+    const $ = cheerio.load(response.data);
 
     const joueurs = [];
 
@@ -33,22 +38,23 @@ app.get("/classement", async (req, res) => {
           points: $(cols[2]).text().trim(),
         };
 
-        if (joueur.nom) {
-          joueurs.push(joueur);
-        }
+        if (joueur.nom) joueurs.push(joueur);
       }
     });
 
     res.json(joueurs);
   } catch (error) {
-    console.error("Erreur scraping :", error);
-    res.status(500).json({ error: "Erreur scraping" });
+    console.error("❌ Erreur scraping :", error.message);
+
+    res.status(500).json({
+      error: "Erreur scraping",
+      detail: error.message,
+    });
   }
 });
 
-// ✅ Lancer serveur
 const PORT = process.env.PORT || 3000;
 
 app.listen(PORT, () => {
-  console.log(`✅ Backend lancé sur port ${PORT}`);
+  console.log(`✅ Backend lancé sur ${PORT}`);
 });
