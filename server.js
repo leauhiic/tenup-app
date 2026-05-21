@@ -53,3 +53,35 @@ app.get("/classement", async (req, res) => {
     res.status(500).json({ error: error.message });
   }
 });
+
+app.get("/tournois", async (req, res) => {
+  try {
+    const url = "https://tenup.fft.fr/classement/7146157482/padel";
+
+    const response = await axios.get(url, {
+      headers: { "User-Agent": "Mozilla/5.0" },
+    });
+
+    const $ = cheerio.load(response.data);
+
+    const tournois = [];
+
+    $(".mes-competitions-container tbody tr").each((i, el) => {
+      const cols = $(el).find("td");
+
+      if (cols.length >= 7) {
+        tournois.push({
+          date: $(cols[0]).text().trim(),
+          nom: $(cols[1]).text().trim(),
+          categorie: $(cols[2]).text().trim(),
+          partenaire: $(cols[4]).text().trim(),
+          points: $(cols[6]).text().trim(),
+        });
+      }
+    });
+
+    res.json(tournois);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
