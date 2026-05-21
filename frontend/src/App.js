@@ -21,7 +21,7 @@ function App() {
     return (
       (categorie === "all" || t.Catégorie === categorie) &&
       (t.Nom?.toLowerCase().includes(search.toLowerCase()) ||
-       t.Partenaire?.toLowerCase().includes(search.toLowerCase())
+       t.Partenaire?.toLowerCase().includes(search.toLowerCase()))
     );
   });
 
