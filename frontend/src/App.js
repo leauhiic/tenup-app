@@ -157,6 +157,7 @@ return (
                 style={{
                   background: i % 2 === 0 ? "#fafafa" : "white"
                 }}
+              >
               <td>{t.Date}</td>
               <td>{t.Nom}</td>
               <td>{t.Catégorie}</td>
