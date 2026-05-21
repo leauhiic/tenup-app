@@ -34,14 +34,26 @@ const parseDate = (dateStr) => {
   const [ordreAscendant, setOrdreAscendant] = useState(false);
 
   // 🔄 tri
+
   const sorted = [...filtered].sort((a, b) => {
-    if (tri === "points") return b.Point - a.Point;
+    if (tri === "points") {
+      return ordreAscendant
+        ? a.Point - b.Point
+        : b.Point - a.Point;
+    }
+  
     if (tri === "date") {
-      return parseDate(b.Date) - parseDate(a.Date);
-    return ordreAscendant ? -diff : diff;
-  }
+      const dateA = parseDate(a.Date);
+      const dateB = parseDate(b.Date);
+  
+      return ordreAscendant
+        ? dateA - dateB   // ancien → récent
+        : dateB - dateA;  // récent → ancien
+    }
+  
     return 0;
   });
+
 
 
 const meilleurs = [...sorted]
