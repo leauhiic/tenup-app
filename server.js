@@ -34,4 +34,7 @@ app.get("/tournois", async (req, res) => {
 });
 
 app.listen(3000, () => console.log("✅ API prête"));
-``
+
+app.get("/", (req, res) => {
+  res.send("✅ Backend TenUp OK");
+});
