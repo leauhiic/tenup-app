@@ -2,10 +2,17 @@ const express = require("express");
 const axios = require("axios");
 const cors = require("cors");
 const cheerio = require("cheerio");
-const puppeteer = require("puppeteer");
+const chromium = require("@sparticuz/chromium");
+const puppeteer = require("puppeteer-core");
 
 const app = express();
 app.use(cors());
+
+const browser = await puppeteer.launch({
+  args: chromium.args,
+  executablePath: await chromium.executablePath(),
+  headless: true,
+});
 
 // ✅ Mets tes cookies ici
 const COOKIES = [
