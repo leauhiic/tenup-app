@@ -8,22 +8,9 @@ const puppeteer = require("puppeteer-core");
 const app = express();
 app.use(cors());
 
-const browser = await puppeteer.launch({
-  args: [
-    ...chromium.args,
-    "--no-sandbox",
-    "--disable-setuid-sandbox",
-    "--disable-dev-shm-usage",
-    "--disable-gpu"
-  ],
-  executablePath: await chromium.executablePath(),
-  headless: true,
-});
-
-
 const Tournois = [
   {
-    "Date tournoi": "27/07/2025",
+    "Date": "27/07/2025",
     "Nom": "tournoi interne P250",
     "type": "P250",
     "Catégorie": "DM",
@@ -33,7 +20,7 @@ const Tournois = [
     "Validité": "juil-26"
   },
   {
-    "Date tournoi": "27/07/2025",
+    "Date": "27/07/2025",
     "Nom": "tournoi interne P250",
     "type": "P250",
     "Catégorie": "DX",
@@ -43,7 +30,7 @@ const Tournois = [
     "Validité": "juil-26"
   },
   {
-    "Date tournoi": "30/01/2026",
+    "Date": "30/01/2026",
     "Nom": "P250 HOMMES",
     "type": "P250",
     "Catégorie": "DM",
@@ -53,7 +40,7 @@ const Tournois = [
     "Validité": "janv-27"
   },
   {
-    "Date tournoi": "12/08/2025",
+    "Date": "12/08/2025",
     "Nom": "P250 H",
     "type": "P250",
     "Catégorie": "DM",
@@ -63,7 +50,7 @@ const Tournois = [
     "Validité": "août-26"
   },
   {
-    "Date tournoi": "15/07/2025",
+    "Date": "15/07/2025",
     "Nom": "P250 HOMMES",
     "type": "P250",
     "Catégorie": "DM",
@@ -73,7 +60,7 @@ const Tournois = [
     "Validité": "juil-26"
   },
   {
-    "Date tournoi": "16/01/2026",
+    "Date": "16/01/2026",
     "Nom": "p250 messieurs",
     "type": "P250",
     "Catégorie": "DM",
@@ -83,7 +70,7 @@ const Tournois = [
     "Validité": "janv-27"
   },
   {
-    "Date tournoi": "28/01/2026",
+    "Date": "28/01/2026",
     "Nom": "Circuit M+ Matériaux Par Equipes - 4ème étape",
     "type": "P100",
     "Catégorie": "DM",
@@ -93,7 +80,7 @@ const Tournois = [
     "Validité": "janv-27"
   },
   {
-    "Date tournoi": "20/08/2025",
+    "Date": "20/08/2025",
     "Nom": "P250 MIXTE SOIREE",
     "type": "P250",
     "Catégorie": "DX",
@@ -103,7 +90,7 @@ const Tournois = [
     "Validité": "août-26"
   },
   {
-    "Date tournoi": "13/06/2025",
+    "Date": "13/06/2025",
     "Nom": "p250 hommes",
     "type": "P250",
     "Catégorie": "DM",
@@ -113,7 +100,7 @@ const Tournois = [
     "Validité": "juin-26"
   },
   {
-    "Date tournoi": "06/06/2025",
+    "Date": "06/06/2025",
     "Nom": "P250H Mam's Padel",
     "type": "P250",
     "Catégorie": "DM",
@@ -123,7 +110,7 @@ const Tournois = [
     "Validité": "juin-26"
   },
   {
-    "Date tournoi": "14/07/2025",
+    "Date": "14/07/2025",
     "Nom": "P100 MIXTE PADEL GENTLE LUNDI 14/07 MATIN",
     "type": "P100",
     "Catégorie": "DX",
@@ -133,7 +120,7 @@ const Tournois = [
     "Validité": "juil-26"
   },
   {
-    "Date tournoi": "16/02/2026",
+    "Date": "16/02/2026",
     "Nom": "P250H PUNTACO Padel",
     "type": "P250",
     "Catégorie": "DM",
@@ -143,7 +130,7 @@ const Tournois = [
     "Validité": "févr-27"
   },
   {
-    "Date tournoi": "25/07/2025",
+    "Date": "25/07/2025",
     "Nom": "P250 HOMMES",
     "type": "P250",
     "Catégorie": "DM",
@@ -153,7 +140,7 @@ const Tournois = [
     "Validité": "juil-26"
   },
   {
-    "Date tournoi": "24/02/2026",
+    "Date": "24/02/2026",
     "Nom": "P100 HOMMES",
     "type": "P100",
     "Catégorie": "DM",
@@ -178,7 +165,13 @@ app.get("/tournois", (req, res) => {
 app.get("/tournois2", async (req, res) => {
   try {
     const browser = await puppeteer.launch({
-      args: chromium.args,
+      args: [
+        ...chromium.args,
+        "--no-sandbox",
+        "--disable-setuid-sandbox",
+        "--disable-dev-shm-usage",
+        "--disable-gpu"
+      ],
       executablePath: await chromium.executablePath(),
       headless: true,
     });
