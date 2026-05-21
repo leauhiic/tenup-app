@@ -1,102 +1,90 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 const API = "https://tenup-app-production.up.railway.app";
 
 function App() {
-  const [token, setToken] = useState("");
   const [tournois, setTournois] = useState([]);
-  const [loading, setLoading] = useState(false);
 
-  // 🔐 Ouvre TenUp pour login
-  const ouvrirTenUp = () => {
-    window.open("https://tenup.fft.fr/connexion", "_blank");
+  useEffect(() => {
+    fetch(`${API}/tournois`)
+      .then((res) => res.json())
+      .then((data) => setTournois(data));
+  }, []);
 
-    alert(
-      "1. Connecte-toi sur TenUp\n" +
-        "2. Ouvre F12 → Network\n" +
-        "3. Copie le Bearer token\n" +
-        "4. Colle-le ici 👇"
-    );
-  };
-
-  // 📋 Récupérer les tournois
-  const chargerTournois = async () => {
-    if (!token) {
-      alert("Merci de coller ton token TenUp");
-      return;
-    }
-
-    setLoading(true);
-
-    try {
-      const res = await fetch(`${API}/tournois`, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      });
-
-      const data = await res.json();
-
-      console.log("Réponse API:", data);
-
-      // Adapter selon structure réelle
-      const liste = Array.isArray(data)
-        ? data
-        : data.data || [];
-
-      setTournois(liste);
-    } catch (err) {
-      console.error(err);
-      alert("Erreur lors de la récupération des tournois");
-    }
-
-    setLoading(false);
-  };
+  const totalPoints = tournois.reduce(
+    (sum, t) => sum + (t.Point || 0),
+    0
+  );
 
   return (
-    <div style={{ padding: 20 }}>
+    <div style={{ padding: 20, fontFamily: "Arial" }}>
       <h1>🎾 TenUp Dashboard</h1>
 
-      {/* 🔐 Login */}
-      <button onClick={ouvrirTenUp} style={{ marginBottom: 10 }}>
-        🔐 Se connecter à TenUp
-      </button>
-
-      <div>
-        <input
-          type="text"
-          placeholder="Colle ton token TenUp ici"
-          value={token}
-          onChange={(e) => setToken(e.target.value)}
-          style={{ width: 400, padding: 5 }}
+      {/* 🔹 Stats */}
+      <div style={{ display: "flex", gap: 20, marginBottom: 20 }}>
+        <Card title="Tournois" value={tournois.length} />
+        <Card title="Points total" value={totalPoints} />
+        <Card
+          title="Meilleur score"
+          value={
+            Math.max(...tournois.map((t) => t.Point || 0), 0)
+          }
         />
       </div>
 
-      {/* 📋 Bouton */}
-      <div style={{ marginTop: 10 }}>
-        <button onClick={chargerTournois}>
-          {loading ? "Chargement..." : "Charger mes tournois"}
-        </button>
-      </div>
-
-      {/* 📊 Résultats */}
-      <ul style={{ marginTop: 20 }}>
-        {tournois.length === 0 && !loading && (
-          <p>Aucun tournoi chargé</p>
-        )}
-
-        {tournois.map((t, i) => (
-          <li key={i} style={{ marginBottom: 10 }}>
-            <b>{t.nom || "Tournoi"}</b>
-            <br />
-            📅 {t.dateDebut || "Date inconnue"}
-            <br />
-            ⭐ Points : {t.points || 0}
-          </li>
-        ))}
-      </ul>
+      {/* 🔹 Tableau */}
+      <table style={tableStyle}>
+        <thead>
+          <tr>
+            <th>Date</th>
+            <th>Nom</th>
+            <th>Catégorie</th>
+            <th>Partenaire</th>
+            <th>Classement</th>
+            <th>Points</th>
+          </tr>
+        </thead>
+        <tbody>
+          {tournois.map((t, i) => (
+            <tr key={i}>
+              <td>{t["Date tournoi"]}</td>
+              <td>{t.Nom}</td>
+              <td>{t.Catégorie}</td>
+              <td>{t.Partenaire}</td>
+              <td>{t.Classement}</td>
+              <td style={{ fontWeight: "bold" }}>{t.Point}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
     </div>
   );
 }
+
+// 🔹 carte stats
+function Card({ title, value }) {
+  return (
+    <div
+      style={{
+        background: "#f5f5f5",
+        padding: 20,
+        borderRadius: 10,
+        minWidth: 120,
+        textAlign: "center",
+      }}
+    >
+      <div style={{ fontSize: 14 }}>{title}</div>
+      <div style={{ fontSize: 24, fontWeight: "bold" }}>
+        {value}
+      </div>
+    </div>
+  );
+}
+
+// 🔹 style tableau
+const tableStyle = {
+  width: "100%",
+  borderCollapse: "collapse",
+};
 
 export default App;
