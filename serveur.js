@@ -6,6 +6,14 @@ const cors = require("cors");
 const app = express();
 app.use(cors());
 
+// 🔐 LOGIN (redirige vers TenUp)
+app.get("/login", (req, res) => {
+  const url = `https://api.fft.fr/oauth/authorize?response_type=token&client_id=${process.env.TENUP_CLIENT_ID}&redirect_uri=${process.env.REDIRECT_URI}`;
+
+  res.redirect(url);
+});
+
+// 📊 Tournois
 app.get("/tournois", async (req, res) => {
   const token = req.headers.authorization;
 
@@ -21,10 +29,9 @@ app.get("/tournois", async (req, res) => {
 
     res.json(response.data);
   } catch (err) {
-    res.status(500).json({ error: "Erreur API TenUp" });
+    res.status(500).json({ error: "Erreur TenUp" });
   }
 });
 
-app.listen(4000, () => {
-  console.log("✅ Backend lancé sur port 4000");
-});
+app.listen(3000, () => console.log("✅ API prête"));
+``
