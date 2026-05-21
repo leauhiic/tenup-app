@@ -47,7 +47,7 @@ app.get("/classement", async (req, res) => {
       }
     });
 
-    res.json(cols);
+    res.json(joueurs);
   } catch (error) {
     console.error(error);
     res.status(500).json({ error: error.message });
