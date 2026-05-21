@@ -36,3 +36,11 @@ function App() {
 
       <ul>
         {tournois.map((t, i) => (
+          <li key={i}>{t.nom || "Tournoi"}</li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+export default App;
