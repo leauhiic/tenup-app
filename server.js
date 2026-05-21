@@ -23,24 +23,33 @@ app.get("/classement", async (req, res) => {
 
     const response = await axios.get(url, {
       headers: {
-        "User-Agent": "Mozilla/5.0"
+        "User-Agent": "Mozilla/5.0",
+      },
+    });
+
+    const $ = cheerio.load(response.data);
+
+    const joueurs = [];
+
+    // ✅ cibler la bonne table
+    $(".table-ranking tbody tr").each((i, el) => {
+      const cols = $(el).find("td");
+
+      if (cols.length >= 4) {
+        const joueur = {
+          saison: $(cols[0]).text().trim(),
+          classement: $(cols[1]).text().trim(),
+          date: $(cols[2]).text().trim(),
+          progression: $(cols[3]).text().trim(),
+        };
+
+        joueurs.push(joueur);
       }
     });
 
-    const html = response.data;
-
-    // 🔍 Cherche les noms directement dans le HTML
-    const regexNom = /"(prenom|nom)":"(.*?)"/g;
-
-    let match;
-    const joueurs = [];
-
-    while ((match = regexNom.exec(html)) !== null) {
-      joueurs.push(match[2]);
-    }
-
-    res.json(joueurs.slice(0, 50));
-  } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.json(joueurs);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: error.message });
   }
 });
