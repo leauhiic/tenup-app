@@ -119,12 +119,11 @@ return (
           <option value="date">Trier par date</option>
           <option value="points">Trier par points</option>
         </select>
-
           
-<button onClick={() => setOrdreAscendant(!ordreAscendant)}>
-  🔄 Inverser ordre
-</button>
-
+        <button onClick={() => setOrdreAscendant(!ordreAscendant)}>
+          {ordreAscendant ? "⬆️ Croissant" : "⬇️ Décroissant"}
+        </button>
+          
       </div>
 
       {/* 🔹 stats */}
@@ -153,7 +152,11 @@ return (
         </thead>
         <tbody>
       {sorted.map((t, i) => (
-            <tr key={i}>
+               <tr
+                key={i}
+                style={{
+                  background: i % 2 === 0 ? "#fafafa" : "white"
+                }}
               <td>{t.Date}</td>
               <td>{t.Nom}</td>
               <td>{t.Catégorie}</td>
