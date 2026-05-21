@@ -47,11 +47,12 @@ function App() {
         <tbody>
           {tournois.map((t, i) => (
             <tr key={i}>
-              <td>{t["Date tournoi"]}</td>
+              <td>{t.Date}</td>
               <td>{t.Nom}</td>
               <td>{t.Catégorie}</td>
               <td>{t.Partenaire}</td>
               <td>{t.Classement}</td>
+              <td>{t.Validite}</td>
               <td style={{ fontWeight: "bold" }}>{t.Point}</td>
             </tr>
           ))}
