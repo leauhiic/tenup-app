@@ -100,8 +100,13 @@ return (
               <td>{t.Nom}</td>
               <td>{t.Catégorie}</td>
               <td>{t.Partenaire}</td>
-              <td>{t.Classement}</td>
-              <td style={{ fontWeight: "bold" }}>{t.Point}</td>
+              <td>{t.Classement}</td>          
+              <td style={{
+                fontWeight: "bold",
+                color: meilleurs.includes(t) ? "green" : "red"
+              }}>
+                {t.Point}
+              </td>
               <td>{t.Validité}</td>
             </tr>
           ))}
