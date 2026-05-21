@@ -20,16 +20,23 @@ function App() {
   const filtered = tournois.filter((t) => {
     return (
       (categorie === "all" || t.Catégorie === categorie) &&
-      (t.Nom.toLowerCase().includes(search.toLowerCase()) ||
-        t.Partenaire.toLowerCase().includes(search.toLowerCase()))
+      (t.Nom?.toLowerCase().includes(search.toLowerCase()) ||
+       t.Partenaire?.toLowerCase().includes(search.toLowerCase())
     );
   });
 
+
+const pointsPerdus = tournoisPerdus.reduce(
+  (sum, t) => sum + (t.Point || 0),
+  0
+);
   
 const parseDate = (dateStr) => {
+  if (!dateStr) return new Date(0);
   const [jour, mois, annee] = dateStr.split("/");
   return new Date(`${annee}-${mois}-${jour}`);
 };
+
 
   const [ordreAscendant, setOrdreAscendant] = useState(false);
 
@@ -168,6 +175,10 @@ return (
           {tournoisPerdus.length === 0 ? (
             <p>Aucun tournoi ne sort du classement le mois prochain ✅</p>
           ) : (
+            
+            <p style={{ color: "red", fontWeight: "bold" }}>
+              ⚠️ Perte prévue : {pointsPerdus} points
+            </p>
             <table style={tableStyle}>
               <thead>
                 <tr>
