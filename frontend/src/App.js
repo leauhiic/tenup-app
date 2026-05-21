@@ -179,7 +179,7 @@ return (
           {tournoisPerdus.length === 0 ? (
             <p>Aucun tournoi ne sort du classement le mois prochain ✅</p>
           ) : (
-            
+            <div>
             <p style={{ color: "red", fontWeight: "bold" }}>
               ⚠️ Perte prévue : {pointsPerdus} points
             </p>
@@ -205,6 +205,7 @@ return (
                 ))}
               </tbody>
             </table>
+            </div>
           )}
     </div>
   );
