@@ -4,6 +4,10 @@ const API = "https://tenup-app-production.up.railway.app";
 
 function App() {
   const [tournois, setTournois] = useState([]);
+  const [search, setSearch] = useState("");
+  const [tri, setTri] = useState("date");
+  const [categorie, setCategorie] = useState("all");
+
 
   useEffect(() => {
     fetch(`${API}/tournois`)
@@ -11,32 +15,66 @@ function App() {
       .then((data) => setTournois(data));
   }, []);
 
+  
+// 🔍 filtre
+  const filtered = tournois.filter((t) => {
+    return (
+      (categorie === "all" || t.Catégorie === categorie) &&
+      (t.Nom.toLowerCase().includes(search.toLowerCase()) ||
+        t.Partenaire.toLowerCase().includes(search.toLowerCase()))
+    );
+  });
+
+  // 🔄 tri
+  const sorted = [...filtered].sort((a, b) => {
+    if (tri === "points") return b.Point - a.Point;
+    if (tri === "date") return new Date(b["Date tournoi"]) - new Date(a["Date tournoi"]);
+    return 0;
+  });
+
   const totalPoints = tournois.reduce(
     (sum, t) => sum + (t.Point || 0),
     0
   );
 
-  return (
-    
-    <div className="p-6 max-w-5xl mx-auto">
-      <h1 className="text-3xl font-bold mb-6">
-      🎾 TenUp Dashboard
-      </h1>
+  
+return (
+    <div style={{ padding: 20, fontFamily: "Arial" }}>
+      <h1>🎾 TenUp Dashboard</h1>
 
-      {/* 🔹 Stats */}
+      {/* 🔹 filtres */}
+      <div style={{ display: "flex", gap: 10, marginBottom: 20 }}>
+        <input
+          placeholder="Recherche (tournoi ou partenaire)"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          style={{ padding: 8, width: 250 }}
+        />
+
+        <select onChange={(e) => setCategorie(e.target.value)}>
+          <option value="all">Toutes catégories</option>
+          <option value="DM">DM</option>
+          <option value="DX">DX</option>
+        </select>
+
+        <select onChange={(e) => setTri(e.target.value)}>
+          <option value="date">Trier par date</option>
+          <option value="points">Trier par points</option>
+        </select>
+      </div>
+
+      {/* 🔹 stats */}
       <div style={{ display: "flex", gap: 20, marginBottom: 20 }}>
-        <Card title="Tournois" value={tournois.length} />
+        <Card title="Tournois" value={sorted.length} />
         <Card title="Points total" value={totalPoints} />
         <Card
           title="Meilleur score"
-          value={
-            Math.max(...tournois.map((t) => t.Point || 0), 0)
-          }
+          value={Math.max(...sorted.map((t) => t.Point || 0), 0)}
         />
       </div>
 
-      {/* 🔹 Tableau */}
-      <table className="w-full border rounded-xl overflow-hidden">
+      {/* 🔹 tableau */}
+      <table style={tableStyle}>
         <thead>
           <tr>
             <th>Date</th>
@@ -49,15 +87,15 @@ function App() {
           </tr>
         </thead>
         <tbody>
-          {tournois.map((t, i) => (
+      {sorted.map((t, i) => (
             <tr key={i}>
               <td>{t.Date}</td>
               <td>{t.Nom}</td>
               <td>{t.Catégorie}</td>
               <td>{t.Partenaire}</td>
               <td>{t.Classement}</td>
-              <td>{t.Validité}</td>
               <td style={{ fontWeight: "bold" }}>{t.Point}</td>
+              <td>{t.Validité}</td>
             </tr>
           ))}
         </tbody>
