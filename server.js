@@ -163,6 +163,57 @@ app.get("/tournois", (req, res) => {
 });
 
 
+app.get("/tournois2", async (req, res) => {
+  try {
+    const browser = await puppeteer.launch({
+      args: chromium.args,
+      executablePath: await chromium.executablePath(),
+      headless: true,
+    });
+
+    const page = await browser.newPage();
+
+    await page.goto(
+      "https://tenup.fft.fr/classement/7146157482/padel",
+      { waitUntil: "networkidle2" }
+    );
+
+    await page.waitForSelector(".mes-competitions-container");
+
+    const data = await page.evaluate(() => {
+      const rows = document.querySelectorAll(
+        ".mes-competitions-container tbody tr"
+      );
+
+      const result = [];
+
+      rows.forEach((row) => {
+        const cols = row.querySelectorAll("td");
+
+        if (cols.length >= 7) {
+          result.push({
+            date: cols[0].innerText.trim(),
+            nom: cols[1].innerText.trim(),
+            categorie: cols[2].innerText.trim(),
+            partenaire: cols[4].innerText.trim(),
+            classement: cols[5].innerText.trim(),
+            points: cols[6].innerText.trim(),
+          });
+        }
+      });
+
+      return result;
+    });
+
+    await browser.close();
+
+    res.json(data);
+  } catch (err) {
+    console.error("❌ ERREUR:", err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 
 
 app.listen(3000, () => {
