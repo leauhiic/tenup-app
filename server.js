@@ -8,6 +8,9 @@ app.get("/", (req, res) => {
   res.send("✅ Backend OK Railway fonctionne");
 });
 
-app.listen(process.env.PORT || 3000, () => {
-  console.log("✅ Server started");
+const PORT = process.env.PORT || 3000;
+
+// 🔥 IMPORTANT : écoute sur 0.0.0.0
+app.listen(PORT, "0.0.0.0", () => {
+  console.log(`✅ Server started on ${PORT}`);
 });
