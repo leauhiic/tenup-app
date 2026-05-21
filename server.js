@@ -107,16 +107,16 @@ app.get("/", (req, res) => {
 });
 
 // ✅ scraping automatique connecté
+
 app.get("/classement", async (req, res) => {
   try {
     const browser = await puppeteer.launch({
-      args: ["--no-sandbox"],
+      args: chromium.args,
+      executablePath: await chromium.executablePath(),
+      headless: true,
     });
 
     const page = await browser.newPage();
-
-    // ✅ injecter cookies (connexion automatique)
-    await page.setCookie(...COOKIES);
 
     await page.goto(
       "https://tenup.fft.fr/classement/7146157482/padel",
@@ -156,6 +156,7 @@ app.get("/classement", async (req, res) => {
     res.status(500).json({ error: err.message });
   }
 });
+
 
 
 
