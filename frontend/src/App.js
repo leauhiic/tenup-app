@@ -7,12 +7,18 @@ function App() {
   const [tournois, setTournois] = useState([]);
 
   // 🔐 lancer login
-  const login = () => {
-    const popup = window.open(
-      `${API}/login`,
-      "login",
-      "width=600,height=700"
-    );
+  
+const login = () => {
+  window.open(
+    "https://tenup.fft.fr/connexion",
+    "_blank"
+  );
+
+  alert(
+    "Connecte-toi sur TenUp puis reviens ici.\nEnsuite on récupérera automatiquement ton token."
+  );
+};
+
 
     const interval = setInterval(() => {
       try {
