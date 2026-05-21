@@ -28,7 +28,7 @@ function App() {
   // 🔄 tri
   const sorted = [...filtered].sort((a, b) => {
     if (tri === "points") return b.Point - a.Point;
-    if (tri === "date") return new Date(b.Date) - new Date(a.Date);
+    if (tri === "date") return b.Date - a.Date;
     return 0;
   });
 
@@ -138,19 +138,17 @@ return (
                   <th>Nom</th>
                   <th>Partenaire</th>
                   <th>Points perdus</th>
-                  <th>Validité</th>
                 </tr>
               </thead>
               <tbody>
                 {tournoisPerdus.map((t, i) => (
                   <tr key={i} style={{ background: "#ffe5e5" }}>
-                    <td>{t["Date tournoi"]}</td>
+                    <td>{t.Date}</td>
                     <td>{t.Nom}</td>
                     <td>{t.Partenaire}</td>
                     <td style={{ fontWeight: "bold", color: "red" }}>
                       {t.Point}
                     </td>
-                    <td>{t["Validité"]}</td>
                   </tr>
                 ))}
               </tbody>
