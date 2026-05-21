@@ -15,73 +15,32 @@ app.listen(3000, () => {
   console.log("✅ Backend prêt");
 });
 
-// ✅ route scraping
+
+// SCRAPING
 app.get("/classement", async (req, res) => {
   try {
     const url = "https://tenup.fft.fr/classement/7146157482/padel";
 
-    // ✅ important : headers + timeout
     const response = await axios.get(url, {
       headers: {
-        "User-Agent":
-          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-      },
-      timeout: 10000,
-    });
-
-    const html = response.data;
-    const $ = cheerio.load(html);
-
-    const joueurs = [];
-
-    $("tr").each((i, el) => {
-      const cols = $(el).find("td");
-
-      if (cols.length >= 3) {
-        const joueur = {
-          classement: $(cols[0]).text().trim(),
-          nom: $(cols[1]).text().trim(),
-          points: $(cols[2]).text().trim(),
-        };
-
-        if (joueur.nom) {
-          joueurs.push(joueur);
-        }
+        "User-Agent": "Mozilla/5.0"
       }
     });
 
-    res.json(joueurs);
-  } catch (error) {
-    console.error("❌ Erreur scraping :", error.message);
+    const html = response.data;
 
-    // ✅ fallback si TenUp bloque
-    try {
-      const proxyUrl =
-        "https://api.allorigins.win/raw?url=https://tenup.fft.fr/classement/7146157482/padel";
+    // 🔍 Cherche les noms directement dans le HTML
+    const regexNom = /"(prenom|nom)":"(.*?)"/g;
 
-      const proxyResponse = await axios.get(proxyUrl);
+    let match;
+    const joueurs = [];
 
-      const $ = cheerio.load(proxyResponse.data);
-      const joueurs = [];
-
-      $("tr").each((i, el) => {
-        const cols = $(el).find("td");
-
-        if (cols.length >= 3) {
-          joueurs.push({
-            classement: $(cols[0]).text().trim(),
-            nom: $(cols[1]).text().trim(),
-            points: $(cols[2]).text().trim(),
-          });
-        }
-      });
-
-      res.json(joueurs);
-    } catch (err) {
-      res.status(500).json({
-        error: "Erreur scraping",
-        detail: err.message,
-      });
+    while ((match = regexNom.exec(html)) !== null) {
+      joueurs.push(match[2]);
     }
+
+    res.json(joueurs.slice(0, 50));
+  } catch (err) {
+    res.status(500).json({ error: err.message });
   }
 });
