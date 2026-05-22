@@ -223,13 +223,13 @@ app.get("/import", async (req, res) => {
         `INSERT INTO tournois (date, nom, categorie, partenaire, classement, point, validite)
          VALUES ($1, $2, $3, $4, $5, $6, $7)`,
         [
-          t.date,
-          t.nom,
-          t.categorie,
-          t.partenaire,
-          t.classement,
-          t.point,
-          t.validite,
+          t["Date"],
+          t["Nom"],
+          t["Catégorie"],
+          t["Partenaire"],
+          t["Classement"],
+          t["Point"],
+          t["Validité"]
         ]
       );
     }
