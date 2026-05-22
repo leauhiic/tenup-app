@@ -609,9 +609,10 @@ export default function App() {
   );
 
   const sorted = [...filtered].sort((a, b) => {
-    if (tri === "points") return ordreAscendant ? a.point - b.point : b.point - a.point;
+    if (tri === "date") {
     const da = parseDate(a.date), db = parseDate(b.date);
-    return ordreAscendant ? da - db : db - da;
+    return ordreAscendant ? da - db : db - da;}
+    return ordreAscendant ? a.point - b.point : b.point - a.point;
   });
 
   const meilleurs = [...sorted].sort((a, b) => b.point - a.point).slice(0, 12);
