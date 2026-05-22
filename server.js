@@ -211,7 +211,35 @@ app.post("/tournois", async (req, res) => {
   }
 });
 
+const data = require("./tournois.json");
 
+app.get("/import", async (req, res) => {
+  try {
+    // ⚠️ nettoie avant import (optionnel)
+    await db.query("DELETE FROM tournois");
+
+    for (const t of data) {
+      await db.query(
+        `INSERT INTO tournois (date, nom, categorie, partenaire, classement, point, validite)
+         VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+        [
+          t.date,
+          t.nom,
+          t.categorie,
+          t.partenaire,
+          t.classement,
+          t.point,
+          t.validite,
+        ]
+      );
+    }
+
+    res.send("✅ Import réussi !");
+  } catch (err) {
+    console.error(err);
+    res.status(500).send(err.message);
+  }
+});
 
 app.listen(3000, () => {
   console.log("✅ Backend prêt");
