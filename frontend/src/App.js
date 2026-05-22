@@ -793,7 +793,6 @@ export default function App() {
                 <th>Partenaire</th>
                 <th>Classement</th>
                 <th>Points</th>
-                <th>Validité</th>
               </tr>
             </thead>
             <tbody>
