@@ -716,12 +716,6 @@ export default function App() {
               )}
             </div>
 
-            <div className="form-field">
-              <label className="form-label">Validité</label>
-              <input className="form-input" type="text" name="validite" value={form.validite} onChange={handleChange} placeholder="ex: juil-26" />
-              <span className="form-hint">Auto : date + 12 mois</span>
-            </div>
-
           </div>
           <div className="form-actions">
             <button className="btn-primary" onClick={handleSubmit} disabled={loading}>
@@ -817,7 +811,6 @@ export default function App() {
                     <td>
                       <span className={isTop12 ? "pts-top12" : "pts-out"}>{t.point}</span>
                     </td>
-                    <td className={isExpiringSoon ? "validite-near" : "dim"}>{t.validite}</td>
                   </tr>
                 );
               })}
