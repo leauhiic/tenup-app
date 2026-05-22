@@ -89,6 +89,7 @@ export default function App() {
           classement: parseInt(form.classement),
           point: parseInt(form.point),
           validite: form.validite,
+          manuel: true,
         }),
       });
       if (!res.ok) throw new Error("Erreur serveur");
