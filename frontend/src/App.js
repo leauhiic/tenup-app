@@ -19,9 +19,9 @@ function App() {
 // 🔍 filtre
   const filtered = tournois.filter((t) => {
     return (
-      (categorie === "all" || t.Catégorie === categorie) &&
-      (t.Nom?.toLowerCase().includes(search.toLowerCase()) ||
-       t.Partenaire?.toLowerCase().includes(search.toLowerCase()))
+      (categorie === "all" || t.categorie === categorie) &&
+      (t.nom?.toLowerCase().includes(search.toLowerCase()) ||
+       t.partenaire?.toLowerCase().includes(search.toLowerCase()))
     );
   });
 
@@ -42,13 +42,13 @@ const parseDate = (dateStr) => {
   const sorted = [...filtered].sort((a, b) => {
     if (tri === "points") {
       return ordreAscendant
-        ? a.Point - b.Point
-        : b.Point - a.Point;
+        ? a.point - b.point
+        : b.point - a.point;
     }
   
     if (tri === "date") {
-      const dateA = parseDate(a.Date);
-      const dateB = parseDate(b.Date);
+      const dateA = parseDate(a.date);
+      const dateB = parseDate(b.date);
   
       return ordreAscendant
         ? dateA - dateB   // ancien → récent
@@ -61,12 +61,12 @@ const parseDate = (dateStr) => {
 
 
 const meilleurs = [...sorted]
-  .sort((a, b) => b.Point - a.Point)
+  .sort((a, b) => b.point - a.point)
   .slice(0, 12);
 
 // ✅ somme des 12 meilleurs
 const totalPoints = meilleurs.reduce(
-  (sum, t) => sum + (t.Point || 0),
+  (sum, t) => sum + (t.point || 0),
   0
 );
 
@@ -89,11 +89,11 @@ const moisSuivant = nextMonth.toLocaleDateString("fr-FR", {
 
 // ✅ tournois qui expirent
 const tournoisPerdus = tournois.filter((t) =>
-  t["Validité"]?.toLowerCase().includes(moisSuivant)
+  t.validite?.toLowerCase().includes(moisSuivant)
 );
 
   const pointsPerdus = tournoisPerdus.reduce(
-  (sum, t) => sum + (t.Point || 0),
+  (sum, t) => sum + (t.point || 0),
   0
 );
 return (
@@ -132,7 +132,7 @@ return (
         <Card title="Points total" value={totalPoints} />
         <Card
           title="Meilleur score"
-          value={Math.max(...sorted.map((t) => t.Point || 0), 0)}
+          value={Math.max(...sorted.map((t) => t.point || 0), 0)}
         />
         <Card title="Moyenne (Top 12)" value={moyennePoints} />
       </div>
@@ -158,18 +158,18 @@ return (
                   background: i % 2 === 0 ? "#fafafa" : "white"
                 }}
               >
-              <td>{t.Date}</td>
-              <td>{t.Nom}</td>
-              <td>{t.Catégorie}</td>
-              <td>{t.Partenaire}</td>
-              <td>{t.Classement}</td>          
+              <td>{t.date}</td>
+              <td>{t.nom}</td>
+              <td>{t.categorie}</td>
+              <td>{t.partenaire}</td>
+              <td>{t.classement}</td>          
               <td style={{
                 fontWeight: "bold",
                 color: meilleurs.includes(t) ? "green" : "red"
               }}>
-                {t.Point}
+                {t.point}
               </td>
-              <td>{t.Validité}</td>
+              <td>{t.validite}</td>
             </tr>
           ))}
         </tbody>
@@ -195,11 +195,11 @@ return (
               <tbody>
                 {tournoisPerdus.map((t, i) => (
                   <tr key={i} style={{ background: "#ffe5e5" }}>
-                    <td>{t.Date}</td>
-                    <td>{t.Nom}</td>
-                    <td>{t.Partenaire}</td>
+                    <td>{t.date}</td>
+                    <td>{t.nom}</td>
+                    <td>{t.partenaire}</td>
                     <td style={{ fontWeight: "bold", color: "red" }}>
-                      {t.Point}
+                      {t.point}
                     </td>
                   </tr>
                 ))}
