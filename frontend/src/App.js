@@ -519,7 +519,7 @@ const GLOBAL_CSS = `
 export default function App() {
   const [tournois, setTournois] = useState([]);
   const [search, setSearch] = useState("");
-  const [tri, setTri] = useState("date");
+  const [tri, setTri] = useState("points");
   const [categorie, setCategorie] = useState("all");
   const [ordreAscendant, setOrdreAscendant] = useState(false);
   const [showForm, setShowForm] = useState(false);
