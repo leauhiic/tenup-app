@@ -622,19 +622,11 @@ export default function App() {
 
   const today = new Date();
 
-  const moisActuel = today.getMonth(); // 0-11
-  const anneePrecedente = today.getFullYear() - 1;
+  const moisSuivant = new Date(today.getFullYear(), today.getMonth())
+    .toLocaleDateString("fr-FR", { month: "short" }).toLowerCase()
+    + "-" + String(today.getFullYear()).slice(-2);
+  const tournoisPerdus = actifs.filter(t => t.validite?.toLowerCase().includes(moisSuivant));
   
-  const tournoisPerdus = actifs.filter(t => {
-    if (!t.date) return false;
-  
-    const dateTournoi = parseDate(t.date);
-  
-    return (
-      dateTournoi.getMonth() === moisActuel &&
-      dateTournoi.getFullYear() === anneePrecedente
-    );
-  });
   const pointsPerdus = tournoisPerdus.reduce((s, t) => s + (t.point || 0), 0);
 
   const tranchesDisponibles = TRANCHES[form.type] || [];
