@@ -10,7 +10,7 @@ function App() {
 
 
   useEffect(() => {
-    fetch(`${API}/tournois2`)
+    fetch(`${API}/tournois`)
       .then((res) => res.json())
       .then((data) => setTournois(data));
   }, []);
