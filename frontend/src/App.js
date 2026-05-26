@@ -558,13 +558,12 @@ const expires = tournois.filter(t => {
   const d = parseDate(t.date);
   return d < startWindow;
 });
-  const tournoisExpirants = actifs.filter(t => {
-    const d = parseDate(t.date);
-    const expiration = new Date(d.getFullYear() + 1, d.getMonth(), 1);
-  
-    return expiration.getFullYear() === nextMonth.getFullYear() &&
-           expiration.getMonth() === nextMonth.getMonth();
-  });
+  const tournoisExpirants = tournois.filter(t => {
+  const d = parseDate(t.date);
+
+  return d.getMonth() === now.getMonth() &&
+         d.getFullYear() === now.getFullYear() - 1;
+});
 
   const tournoisMoisCourant = tournois.filter(t => {
     const d = parseDate(t.date);
@@ -596,6 +595,7 @@ const expires = tournois.filter(t => {
   const bestScore = Math.max(...sorted.map(t => t.point || 0), 0);
 
   const today = new Date();
+  const moisLabel = now.toLocaleDateString("fr-FR", { month: "long" });
 
   const moisSuivant = new Date(today.getFullYear(), today.getMonth())
     .toLocaleDateString("fr-FR", { month: "short" }).toLowerCase()
@@ -603,7 +603,7 @@ const expires = tournois.filter(t => {
   const tournoisPerdus = tournoisExpirants;
 
   
-  const pointsPerdus = tournoisPerdus.reduce((s, t) => s + (t.point || 0), 0);
+  const pointsPerdus = tournoisExpirants.reduce((s, t) => s + (t.point || 0), 0);
 
   const tranchesDisponibles = TRANCHES[form.type] || [];
   const pointsPreview = form.type && form.tranche && form.classement
@@ -800,7 +800,7 @@ const expires = tournois.filter(t => {
       {tournoisPerdus.length > 0 && (
         <>
           <div className="section-header">
-            <div className="section-title">Expirent ce mois-ci</div>
+            <div className="section-title">Expirent fin {moisLabel}</div>
             <span className="section-badge danger">{tournoisPerdus.length} tournoi{tournoisPerdus.length > 1 ? "s" : ""}</span>
           </div>
           <div className="alert-bar">
