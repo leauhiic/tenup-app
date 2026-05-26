@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import BAREME from "./bareme.json";
+import { useEffect, useState, useMemo } from "react";
 
 const API = "https://tenup-app-production.up.railway.app";
 
