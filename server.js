@@ -137,14 +137,20 @@ if (page.url().includes("login.fft.fr")) {
 
 
   // 🎾 PAGE JOUEUR
-  await page.goto("https://tenup.fft.fr/classement/7146157482/padel", {
-    waitUntil: "networkidle",
+ await page.goto("https://tenup.fft.fr/classement/7146157482/padel", {
+    waitUntil: "domcontentloaded"
   });
-
-  // attend le tableau
-  await page.waitForSelector("#custom-table tbody tr", {
-    timeout: 20000
-  });
+  
+  // attendre que la page AJAX se stabilise
+  await page.waitForLoadState("networkidle");
+  
+  // attendre les données (pas juste le DOM)
+  await page.waitForFunction(() => {
+    return document.querySelectorAll("#custom-table tbody tr").length > 0;
+  }, { timeout: 30000 });
+  
+  // petit délai sécurité
+  await page.waitForTimeout(2000);
   
   // 📊 SCRAP
   const tournois = await page.evaluate(() => {
