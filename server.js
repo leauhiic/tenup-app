@@ -3,6 +3,9 @@ const cors = require("cors");
 const { chromium } = require("playwright");
 
 
+const TENUP_USER = "leau-hiic";
+const TENUP_PASSWORD = "31!Vosl!";
+
 
 const app = express();
 app.use(cors());
@@ -111,8 +114,10 @@ async function scrapeTenup() {
   });
 
   
-  await page.fill('#username', process.env.TENUP_USER);
-  await page.fill('#password', process.env.TENUP_PASSWORD);
+  
+  await page.fill('#username', TENUP_USER);
+  await page.fill('#password', TENUP_PASSWORD);
+
 
 
   await Promise.all([
