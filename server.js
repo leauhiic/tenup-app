@@ -2,222 +2,214 @@ require("dotenv").config();
 
 const express = require("express");
 const cors = require("cors");
-const { chromium } = require("playwright");
 const fs = require("fs");
+const path = require("path");
+const { chromium } = require("playwright");
 
 const app = express();
 app.use(cors());
 app.use(express.json());
 
-const STATE_PATH = "./storageState.json";
+const db = require("./db");
+
+// =========================
+// CONFIG
+// =========================
+const SCRAPE_KEY = process.env.SCRAPE_KEY;
+const STORAGE_STATE_PATH = path.join(__dirname, "storageState.json");
 
 const URL =
   "https://tenup.fft.fr/classement/7146157482/padel";
 
-// -------------------------
-// HEALTH
-// -------------------------
-app.get("/", (req, res) => {
-  res.send("🚀 TenUp scraper OK (session mode)");
+// =========================
+// INIT DB
+// =========================
+app.get("/init-db", async (req, res) => {
+  try {
+    await db.query(`
+      CREATE TABLE IF NOT EXISTS tournois (
+        id SERIAL PRIMARY KEY,
+        date TEXT,
+        nom TEXT,
+        categorie TEXT,
+        partenaire TEXT,
+        classement INTEGER,
+        point INTEGER,
+        validite TEXT
+      )
+    `);
+
+    res.send("✅ DB OK");
+  } catch (err) {
+    res.status(500).send(err.message);
+  }
 });
 
-// -------------------------
-// SCRAPE HTML COMPLET
-// -------------------------
+// =========================
+// HEALTHCHECK
+// =========================
+app.get("/", (req, res) => {
+  res.send("🚀 TenUp API OK");
+});
+
+// =========================
+// LOAD BROWSER CONTEXT
+// =========================
+async function createContext(browser) {
+  if (fs.existsSync(STORAGE_STATE_PATH)) {
+    return await browser.newContext({
+      storageState: STORAGE_STATE_PATH,
+    });
+  }
+
+  return await browser.newContext();
+}
+
+// =========================
+// SCRAPER CORE
+// =========================
 async function scrapeTenup() {
   const browser = await chromium.launch({
     headless: true,
     args: ["--no-sandbox", "--disable-setuid-sandbox"],
   });
 
-  if (!fs.existsSync(STATE_PATH)) {
-    throw new Error(
-      "❌ Pas de session. Lance d'abord node login-once.js"
-    );
-  }
-
-  const context = await browser.newContext({
-    storageState: STATE_PATH,
-  });
-
+  const context = await createContext(browser);
   const page = await context.newPage();
 
-  console.log("🌐 Chargement TenUp avec session...");
+  await page.goto(URL, { waitUntil: "networkidle" });
 
-  await page.goto(URL, {
-    waitUntil: "networkidle",
-  });
+  // IMPORTANT : on ne force PLUS de login automatique
+  // (Keycloak casse le flow en headless sur Railway)
 
   await page.waitForTimeout(4000);
 
-  const html = await page.content();
-
+  // =========================
+  // DEBUG INFO
+  // =========================
   const debug = await page.evaluate(() => {
     return {
       url: window.location.href,
       hasDrupal: !!window.Drupal,
-      hasSettings: !!window.Drupal?.settings,
-      title: document.title,
-      bodyPreview: document.body?.innerText?.slice(0, 300),
+      drupalKeys: window.Drupal?.settings
+        ? Object.keys(window.Drupal.settings)
+        : [],
+      bodyTextPreview: document.body.innerText.slice(0, 800),
+      scriptCount: document.scripts.length,
     };
   });
 
+  // =========================
+  // FULL HTML (IMPORTANT)
+  // =========================
+  const html = await page.content();
+
+  // =========================
+  // TRY EXTRACT DRUPAL STATE
+  // =========================
+  let tournois = [];
+
+  try {
+    const drupalSettings = await page.evaluate(() => {
+      return window.Drupal?.settings || null;
+    });
+
+    const joueur = drupalSettings?.fft_fiche_joueur;
+
+    tournois =
+      joueur?.fft_classement?.competition?.data?.rows ||
+      [];
+  } catch (e) {
+    console.log("Drupal parse failed");
+  }
+
   await browser.close();
 
-  return { html, debug };
+  return {
+    debug,
+    html,
+    tournois,
+  };
 }
 
-// -------------------------
-// ENDPOINT SCRAPE
-// -------------------------
-app.get("/scrape", async (req, res) => {
+// =========================
+// SCRAPE ENDPOINT
+// =========================
+app.get("/scrape-tenup", async (req, res) => {
   try {
+    if (req.query.key !== SCRAPE_KEY) {
+      return res.status(403).send("❌ Forbidden");
+    }
+
     const data = await scrapeTenup();
-    res.json(data);
+
+    // 👇 IMPORTANT : on renvoie TOUT pour debug
+    res.json({
+      success: true,
+      debug: data.debug,
+      tournoisCount: data.tournois.length,
+      tournois: data.tournois,
+      htmlPreview: data.html.slice(0, 2000), // évite payload énorme
+    });
+  } catch (err) {
+    res.status(500).json({
+      error: err.message,
+    });
+  }
+});
+
+// =========================
+// HTML DEBUG FULL PAGE
+// =========================
+app.get("/debug-html", async (req, res) => {
+  try {
+    const browser = await chromium.launch({
+      headless: true,
+    });
+
+    const page = await browser.newPage();
+
+    await page.goto(URL, { waitUntil: "networkidle" });
+
+    const html = await page.content();
+
+    await browser.close();
+
+    res.send(html);
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
 });
 
-// -------------------------
+// =========================
+// DEBUG STATE LIGHT
+// =========================
+app.get("/debug-state", async (req, res) => {
+  try {
+    const browser = await chromium.launch({ headless: true });
+    const page = await browser.newPage();
+
+    await page.goto(URL, { waitUntil: "networkidle" });
+
+    const state = await page.evaluate(() => ({
+      url: location.href,
+      drupal: !!window.Drupal,
+      keys: window.Drupal?.settings
+        ? Object.keys(window.Drupal.settings)
+        : [],
+    }));
+
+    await browser.close();
+
+    res.json(state);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// =========================
 // START
-// -------------------------
-app.listen(3000, () => {
-  console.log("🚀 Server running on http://localhost:3000");
-});    headless: true,
-    args: ["--no-sandbox", "--disable-setuid-sandbox"],
-  });
-
-  const context = await browser.newContext();
-  const page = await context.newPage();
-
-  console.log("🔐 Opening Keycloak FFT...");
-
-  await page.goto("https://login.fft.fr/", {
-    waitUntil: "networkidle",
-  });
-
-  // 🔥 ATTEND N'IMPORTE QUEL INPUT (Keycloak lazy render)
-  await page.waitForTimeout(5000);
-
-  // DEBUG utile si ça recasse
-  console.log("URL after redirect:", page.url());
-
-  // 🎯 Keycloak peut utiliser différents names selon version
-  const username = page.locator(
-    'input[name="username"], input#username, input[type="text"]'
-  );
-
-  const password = page.locator(
-    'input[name="password"], input#password, input[type="password"]'
-  );
-
-  await username.first().fill(FFT_USER);
-  await password.first().fill(FFT_PASSWORD);
-
-  const submit = page.locator(
-    'button[type="submit"], input[type="submit"]'
-  );
-
-  await Promise.all([
-    page.waitForNavigation({ waitUntil: "networkidle" }),
-    submit.first().click(),
-  ]);
-
-  console.log("✅ FFT login completed");
-
-  await context.storageState({ path: STATE_PATH });
-
-  await browser.close();
-}
-
-// -------------------------
-// SCRAPE TENUP (AUTH SESSION)
-// -------------------------
-async function scrapeTenup() {
-  const browser = await chromium.launch({
-    headless: true,
-    args: ["--no-sandbox", "--disable-setuid-sandbox"],
-  });
-
-  const context = fs.existsSync(STATE_PATH)
-    ? await browser.newContext({ storageState: STATE_PATH })
-    : await browser.newContext();
-
-  const page = await context.newPage();
-
-  console.log("🌐 Navigation TenUp...");
-
-  await page.goto(TENUP_URL, {
-    waitUntil: "networkidle",
-  });
-
-  await page.waitForTimeout(4000);
-
-  const html = await page.content();
-
-  const debug = await page.evaluate(() => {
-    return {
-      url: window.location.href,
-      hasDrupal: !!window.Drupal,
-      hasSettings: !!window.Drupal?.settings,
-      title: document.title,
-      bodyPreview: document.body?.innerText?.slice(0, 300),
-    };
-  });
-
-  await browser.close();
-
-  return { html, debug };
-}
-
-// -------------------------
-// ROUTE LOGIN MANUEL
-// -------------------------
-app.get("/login", async (req, res) => {
-  try {
-    await loginFFT();
-    res.json({ success: true, message: "FFT login session saved" });
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: err.message });
-  }
-});
-
-// -------------------------
-// SCRAPE HTML COMPLET
-// -------------------------
-app.get("/scrape-html", async (req, res) => {
-  try {
-    const data = await scrapeTenup();
-    res.json(data);
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: err.message });
-  }
-});
-
-// -------------------------
-// DEBUG
-// -------------------------
-app.get("/debug", async (req, res) => {
-  try {
-    const data = await scrapeTenup();
-    res.json({
-      url: data.debug.url,
-      hasDrupal: data.debug.hasDrupal,
-      hasSettings: data.debug.hasSettings,
-      title: data.debug.title,
-      preview: data.debug.bodyPreview,
-    });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-// -------------------------
-// START
-// -------------------------
+// =========================
 app.listen(3000, () => {
   console.log("🚀 Server running on http://localhost:3000");
 });
