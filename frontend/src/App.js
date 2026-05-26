@@ -776,7 +776,7 @@ export default function App() {
             : "rgba(255,77,109,0.3)"
         }}>
           <div className="stat-label">
-            Projection classement
+            Projection points
           </div>
           <div className="stat-value" style={{
             color: deltaPoints >= 0 ? "var(--accent)" : "var(--red)"
