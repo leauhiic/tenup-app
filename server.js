@@ -4,7 +4,6 @@ const express = require("express");
 const cors = require("cors");
 const { chromium } = require("playwright");
 const path = require("path");
-const fs = require("fs");
 
 const app = express();
 app.use(cors());
@@ -18,7 +17,7 @@ const TENUP_PASSWORD = process.env.TENUP_PASSWORD;
 const SCRAPE_KEY = process.env.SCRAPE_KEY;
 
 // -------------------------
-// DB INIT
+// INIT DB
 // -------------------------
 app.get("/init-db", async (req, res) => {
   try {
@@ -43,11 +42,20 @@ app.get("/init-db", async (req, res) => {
 });
 
 // -------------------------
+// HEALTHCHECK
+// -------------------------
+app.get("/", (req, res) => {
+  res.send("🚀 TenUp API OK");
+});
+
+// -------------------------
 // GET DATA
 // -------------------------
 app.get("/tournois", async (req, res) => {
   try {
-    const result = await db.query("SELECT * FROM tournois ORDER BY date DESC");
+    const result = await db.query(
+      "SELECT * FROM tournois ORDER BY date DESC"
+    );
     res.json(result.rows);
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -55,132 +63,88 @@ app.get("/tournois", async (req, res) => {
 });
 
 // -------------------------
-// PLAYWRIGHT PERSISTENCE
-// -------------------------
-const STORAGE_PATH = path.join(__dirname, "storage.json");
-
-// -------------------------
-// SCRAPE FUNCTION ROBUSTE
+// SCRAPER (DRUPAL STATE BASED)
 // -------------------------
 async function scrapeTenup() {
   const browser = await chromium.launch({
     headless: true,
+    args: ["--no-sandbox", "--disable-setuid-sandbox"],
   });
 
-  const context = await browser.newContext(
-    fs.existsSync(STORAGE_PATH)
-      ? { storageState: STORAGE_PATH }
-      : undefined
-  );
-
+  const context = await browser.newContext();
   const page = await context.newPage();
 
-  // anti detection léger
+  // anti-bot léger
   await page.addInitScript(() => {
-    Object.defineProperty(navigator, "webdriver", { get: () => false });
+    Object.defineProperty(navigator, "webdriver", {
+      get: () => false,
+    });
   });
 
-  // -------------------------
-  // NAVIGATE
-  // -------------------------
-  await page.goto(
-    "https://tenup.fft.fr/classement/7146157482/padel",
-    { waitUntil: "domcontentloaded" }
-  );
+  const url =
+    "https://tenup.fft.fr/classement/7146157482/padel";
 
-  await page.waitForTimeout(2000);
+  await page.goto(url, {
+    waitUntil: "domcontentloaded",
+  });
+
+  await page.waitForTimeout(3000);
 
   // -------------------------
-  // LOGIN IF NEEDED
+  // LOGIN CHECK
   // -------------------------
   if (page.url().includes("login")) {
-    console.log("🔐 Login détecté");
+    console.log("🔐 Login requis");
 
-    await page.waitForSelector('input[name="username"]', { timeout: 30000 });
+    await page.waitForSelector('input[name="username"]');
 
-    await page.fill('input[name="username"]', TENUP_USER);
-    await page.fill('input[name="password"]', TENUP_PASSWORD);
+    await page.fill(
+      'input[name="username"]',
+      TENUP_USER
+    );
+    await page.fill(
+      'input[name="password"]',
+      TENUP_PASSWORD
+    );
 
     await Promise.all([
-      page.waitForNavigation({ waitUntil: "networkidle" }),
+      page.waitForNavigation({
+        waitUntil: "domcontentloaded",
+      }),
       page.click('button[type="submit"]'),
     ]);
 
     console.log("✅ Login OK");
-
-    // sauvegarde session
-    await context.storageState({ path: STORAGE_PATH });
   }
 
   // -------------------------
-  // RELOAD PAGE FINAL
+  // RELOAD FINAL PAGE
   // -------------------------
-  await page.goto(
-    "https://tenup.fft.fr/classement/7146157482/padel",
-    { waitUntil: "networkidle" }
-  );
+  await page.goto(url, {
+    waitUntil: "domcontentloaded",
+  });
 
   await page.waitForTimeout(3000);
-  console.log("URL:", page.url());
-  
-  await page.screenshot({
-    path: "debug-tenup-error.png",
-    fullPage: true
-  });
-  
-  console.log(await page.content());
-  // -------------------------
-  // CHECK TABLE AVAILABILITY
-  // -------------------------
-  try {
-    await page.waitForSelector("#custom-table", { timeout: 60000 });
-
-    await page.waitForFunction(() => {
-      return document.querySelectorAll("#custom-table tbody tr").length > 0;
-    }, { timeout: 60000 });
-
-  } catch (e) {
-    console.log("❌ Table non trouvée → debug screenshot");
-
-    await page.screenshot({
-      path: "debug-tenup-error.png",
-      fullPage: true,
-    });
-
-    throw new Error("Table TenUp non chargée");
-  }
 
   // -------------------------
-  // SCRAP
+  // EXTRACTION DRUPAL STATE (IMPORTANT)
   // -------------------------
-  const tournois = await page.evaluate(() => {
-    const rows = document.querySelectorAll("#custom-table tbody tr");
+  const data = await page.evaluate(() => {
+    const s = window.Drupal?.settings;
 
-    const get = (cols, i) =>
-      cols[i]?.innerText?.trim() || null;
-
-    return Array.from(rows).map((row) => {
-      const cols = row.querySelectorAll("td");
-
-      return {
-        date: get(cols, 0),
-        nom: get(cols, 1),
-        categorie: get(cols, 2),
-        epreuve: get(cols, 3),
-        partenaire: get(cols, 4),
-        classement: parseInt(cols[5]?.innerText) || 0,
-        point: parseInt(cols[6]?.innerText) || 0,
-        validite: get(cols, 7),
-      };
-    });
+    return {
+      joueur: s?.fft_fiche_joueur || null,
+      raw: s || null,
+    };
   });
 
   await browser.close();
-  return tournois;
+
+  return data;
 }
 
 // -------------------------
-// SCRAPE ENDPOINT SECURISE
+// SCRAPE ENDPOINT
 // -------------------------
 app.get("/scrape-tenup", async (req, res) => {
   try {
@@ -188,31 +152,37 @@ app.get("/scrape-tenup", async (req, res) => {
       return res.status(403).send("❌ Forbidden");
     }
 
-    const tournois = await scrapeTenup();
+    const data = await scrapeTenup();
 
-    await db.query("DELETE FROM tournois");
+    const joueur = data.joueur;
 
-    for (const t of tournois) {
-      await db.query(
-        `INSERT INTO tournois (date, nom, categorie, partenaire, classement, point, validite)
-         VALUES ($1,$2,$3,$4,$5,$6,$7)`,
-        [
-          t.date,
-          t.nom,
-          t.categorie,
-          t.partenaire,
-          t.classement,
-          t.point,
-          t.validite,
-        ]
-      );
+    if (!joueur) {
+      return res
+        .status(500)
+        .json({ error: "Aucune donnée trouvée" });
     }
+
+    // Exemple mapping (à adapter selon tes besoins)
+    await db.query(
+      `
+      INSERT INTO tournois (date, nom, categorie, partenaire, classement, point, validite)
+      VALUES ($1,$2,$3,$4,$5,$6,$7)
+    `,
+      [
+        new Date().toISOString(),
+        `${joueur.nom} ${joueur.prenom}`,
+        joueur.pratiquePrincipale,
+        null,
+        joueur.echelon || 0,
+        0,
+        "OK",
+      ]
+    );
 
     res.json({
       success: true,
-      count: tournois.length,
+      joueur,
     });
-
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: err.message });
@@ -220,21 +190,33 @@ app.get("/scrape-tenup", async (req, res) => {
 });
 
 // -------------------------
-// DEBUG IMAGE
+// DEBUG STATE
 // -------------------------
-app.get("/debug-image", (req, res) => {
-  const img = path.join(__dirname, "debug-tenup-error.png");
-  if (!fs.existsSync(img)) {
-    return res.status(404).send("No debug image");
-  }
-  res.sendFile(img);
-});
+app.get("/debug-state", async (req, res) => {
+  try {
+    const browser = await chromium.launch({
+      headless: true,
+    });
 
-// -------------------------
-// HEALTHCHECK
-// -------------------------
-app.get("/", (req, res) => {
-  res.send("🚀 TenUp API OK");
+    const page = await browser.newPage();
+
+    await page.goto(
+      "https://tenup.fft.fr/classement/7146157482/padel",
+      {
+        waitUntil: "domcontentloaded",
+      }
+    );
+
+    const state = await page.evaluate(() => {
+      return window.Drupal?.settings;
+    });
+
+    await browser.close();
+
+    res.json(state);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
 });
 
 // -------------------------
