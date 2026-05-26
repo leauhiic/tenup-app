@@ -62,7 +62,7 @@ app.get("/tournois", async (req, res) => {
 });
 
 // -------------------------
-// SCRAPER
+// SCRAPER CORE
 // -------------------------
 async function scrapeTenup() {
   const browser = await chromium.launch({
@@ -93,27 +93,19 @@ async function scrapeTenup() {
     // -------------------------
     await page.goto(url, { waitUntil: "networkidle" });
 
+    await page.waitForTimeout(3000);
+
     // -------------------------
     // LOGIN IF NEEDED
     // -------------------------
-    if (
-      await page.locator('input[name="username"]').count() > 0
-    ) {
+    if (await page.locator('input[name="username"]').count() > 0) {
       console.log("🔐 Login requis");
 
-      await page.fill(
-        'input[name="username"]',
-        TENUP_USER
-      );
-      await page.fill(
-        'input[name="password"]',
-        TENUP_PASSWORD
-      );
+      await page.fill('input[name="username"]', TENUP_USER);
+      await page.fill('input[name="password"]', TENUP_PASSWORD);
 
       await Promise.all([
-        page.waitForNavigation({
-          waitUntil: "networkidle",
-        }),
+        page.waitForNavigation({ waitUntil: "networkidle" }),
         page.click('button[type="submit"]'),
       ]);
 
@@ -121,39 +113,62 @@ async function scrapeTenup() {
     }
 
     // -------------------------
-    // RELOAD FINAL PAGE
+    // FINAL LOAD
     // -------------------------
     await page.goto(url, { waitUntil: "networkidle" });
 
-    // -------------------------
-    // WAIT DRUPAL DATA
-    // -------------------------
-    await page.waitForFunction(() => {
-      return (
-        window.Drupal &&
-        window.Drupal.settings &&
-        window.Drupal.settings.fft_fiche_joueur &&
-        window.Drupal.settings.fft_fiche_joueur.fft_classement
-      );
-    }, { timeout: 15000 });
+    await page.waitForTimeout(5000);
 
     // -------------------------
-    // EXTRACT DATA
+    // DEBUG FLAGS (IMPORTANT)
     // -------------------------
-    const data = await page.evaluate(() => {
-      const joueur = window.Drupal.settings.fft_fiche_joueur;
-
+    const debug = await page.evaluate(() => {
       return {
-        joueur,
-        tournois:
-          joueur?.fft_classement?.competition?.data?.rows || [],
+        hasWindow: !!window,
+        hasDrupal: !!window.Drupal,
+        hasDrupalSettings: !!window.drupalSettings,
       };
     });
 
+    console.log("🔎 DEBUG:", debug);
+
+    // -------------------------
+    // EXTRACTION SAFE MULTI-SOURCE
+    // -------------------------
+    const data = await page.evaluate(() => {
+      const joueur =
+        window.drupalSettings?.fft_fiche_joueur ||
+        window.Drupal?.settings?.fft_fiche_joueur ||
+        null;
+
+      const tournois =
+        joueur?.fft_classement?.competition?.data?.rows || [];
+
+      return {
+        joueur,
+        tournois,
+      };
+    });
+
+    // -------------------------
+    // FALLBACK DEBUG HTML (si vide)
+    // -------------------------
+    if (!data.joueur) {
+      const html = await page.content();
+
+      return {
+        error: "NO_DRUPAL_DATA",
+        debug,
+        htmlSnippet: html.slice(0, 3000),
+      };
+    }
+
     return data;
   } catch (err) {
-    console.error("❌ scrapeTenup error:", err);
-    return null;
+    console.error("❌ scrape error:", err);
+    return {
+      error: err.message,
+    };
   } finally {
     await browser.close();
   }
@@ -170,16 +185,21 @@ app.get("/scrape-tenup", async (req, res) => {
 
     const data = await scrapeTenup();
 
+    if (data?.error) {
+      return res.status(500).json(data);
+    }
+
     if (!data?.joueur) {
       return res.status(500).json({
         error: "Aucune donnée trouvée",
+        debug: data,
       });
     }
 
     const { joueur, tournois } = data;
 
     // -------------------------
-    // INSERT TOURNOIS
+    // INSERT DB
     // -------------------------
     for (const t of tournois) {
       await db.query(
@@ -205,7 +225,8 @@ app.get("/scrape-tenup", async (req, res) => {
       joueur: {
         nom: joueur.nom,
         prenom: joueur.prenom,
-        classement: joueur.fft_classement?.dernierClassement?.rang,
+        classement:
+          joueur?.fft_classement?.dernierClassement?.rang,
       },
       tournoisCount: tournois.length,
     });
@@ -216,14 +237,11 @@ app.get("/scrape-tenup", async (req, res) => {
 });
 
 // -------------------------
-// DEBUG (SAFE)
+// DEBUG ENDPOINT
 // -------------------------
 app.get("/debug-state", async (req, res) => {
   try {
-    const browser = await chromium.launch({
-      headless: true,
-    });
-
+    const browser = await chromium.launch({ headless: true });
     const page = await browser.newPage();
 
     await page.goto(
@@ -234,9 +252,11 @@ app.get("/debug-state", async (req, res) => {
     const state = await page.evaluate(() => {
       return {
         hasDrupal: !!window.Drupal,
-        hasSettings: !!window.Drupal?.settings,
+        hasDrupalSettings: !!window.drupalSettings,
         joueur:
-          window.Drupal?.settings?.fft_fiche_joueur || null,
+          window.drupalSettings?.fft_fiche_joueur ||
+          window.Drupal?.settings?.fft_fiche_joueur ||
+          null,
       };
     });
 
