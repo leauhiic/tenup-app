@@ -1,5 +1,7 @@
 import { useEffect, useState, useMemo } from "react";
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts";
+import { addMonths, startOfMonth, format } from "date-fns";
+
 import BAREME from "./bareme.json";
 
 const API = "https://tenup-app-production.up.railway.app";
@@ -20,6 +22,10 @@ const TRANCHES = {
 
 const CATEGORIES = ["DM","DD","DX"];
 const TYPES = ["P25","P50","P100","P250","P500","P1000","P1500","P2000"];
+
+function monthKey(d) {
+  return d.toLocaleDateString("fr-FR", { month: "short", year: "2-digit" });
+}
 
 function getMonthKey(date) {
   const d = new Date(date);
