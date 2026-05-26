@@ -748,7 +748,6 @@ export default function App() {
   
   const realData = progressionTop12.filter(p => !p.isFuture);
   const projectedData = progressionTop12;
-  const totalPoints = realData.at(-1)?.top12 || 0;
   
   console.log("TOURNOIS:", tournois);
   console.log("PROGRESSION:", progressionTop12);
