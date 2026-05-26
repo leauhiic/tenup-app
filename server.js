@@ -24,7 +24,7 @@ const LOGIN_URL = "https://login.fft.fr/";
 // =========================
 app.get("/init-session", async (req, res) => {
   try {
-    const browser = await cchromium.launch({
+    const browser = await chromium.launch({
       headless: true,
       args: [
         "--no-sandbox",
