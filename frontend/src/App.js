@@ -539,18 +539,11 @@ export default function App() {
   const unAn = new Date();
   unAn.setFullYear(unAn.getFullYear() - 1);
 
-  const nextMonth = new Date(now.getFullYear(), now.getMonth() + 1, 1);
-
-  const tournoisExpirants = actifs.filter(t => {
-    const d = parseDate(t.date);
-    const expiration = new Date(d.getFullYear() + 1, d.getMonth(), 1);
-  
-    return expiration.getFullYear() === nextMonth.getFullYear() &&
-           expiration.getMonth() === nextMonth.getMonth();
-  });
 
   const now = new Date();
-  
+   const nextMonth = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+
+ 
   // début du mois courant
   const startMonth = new Date(now.getFullYear(), now.getMonth(), 1);
   
@@ -560,6 +553,17 @@ export default function App() {
   const actifs = tournois.filter(t => {
     const d = parseDate(t.date);
     return d >= startWindow;
+  });
+const expires = tournois.filter(t => {
+  const d = parseDate(t.date);
+  return d < startWindow;
+});
+  const tournoisExpirants = actifs.filter(t => {
+    const d = parseDate(t.date);
+    const expiration = new Date(d.getFullYear() + 1, d.getMonth(), 1);
+  
+    return expiration.getFullYear() === nextMonth.getFullYear() &&
+           expiration.getMonth() === nextMonth.getMonth();
   });
 
   const tournoisMoisCourant = tournois.filter(t => {
@@ -573,7 +577,7 @@ export default function App() {
     return !(d.getFullYear() === now.getFullYear() &&
              d.getMonth() === now.getMonth());
   });
-  const filtered = actifs.filter(t =>
+  const filtered = actifsClassement.filter(t =>
     (categorie === "all" || t.categorie === categorie) &&
     (t.nom?.toLowerCase().includes(search.toLowerCase()) ||
      t.partenaire?.toLowerCase().includes(search.toLowerCase()))
@@ -596,7 +600,8 @@ export default function App() {
   const moisSuivant = new Date(today.getFullYear(), today.getMonth())
     .toLocaleDateString("fr-FR", { month: "short" }).toLowerCase()
     + "-" + String(today.getFullYear()).slice(-2);
-  const tournoisPerdus = actifs.filter(t => t.validite?.toLowerCase().includes(moisSuivant));
+  const tournoisPerdus = tournoisExpirants;
+
   
   const pointsPerdus = tournoisPerdus.reduce((s, t) => s + (t.point || 0), 0);
 
@@ -771,7 +776,7 @@ export default function App() {
             </thead>
             <tbody>
               {sorted.map((t, i) => {
-                const isTop12 = actifsClassement.includes(t);
+                const isTop12 = meilleurs.includes(t);
                 return (
                   <tr key={i}>
                     <td>{rankBadge(i + 1)}</td>
