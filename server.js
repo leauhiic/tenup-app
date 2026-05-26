@@ -150,68 +150,41 @@ app.get("/scrape-tenup", async (req, res) => {
 
     const data = await scrapeTenup();
 
-    const joueur = data.joueur;
-
-    if (!joueur) {
+    if (!data?.joueur) {
       return res
         .status(500)
         .json({ error: "Aucune donnée trouvée" });
     }
 
-    // Exemple mapping (à adapter selon tes besoins)
-    /await db.query(
-      `
-    //  INSERT INTO tournois (date, nom, categorie, partenaire, classement, point, validite)
-    //  VALUES ($1,$2,$3,$4,$5,$6,$7)
-    //`,
-    //  [
-    //    new Date().toISOString(),
-    //    `${joueur.nom} ${joueur.prenom}`,
-    //    joueur.pratiquePrincipale,
-     //   null,
-     //   joueur.echelon || 0,
-     //   0,
-     //   "OK",
-     // ]
-    //);
+    const { joueur, tournois } = data;
+
+    // 🔥 insertion propre des tournois
+    for (const t of tournois) {
+      await db.query(
+        `
+        INSERT INTO tournois (date, nom, categorie, partenaire, classement, point, validite)
+        VALUES ($1,$2,$3,$4,$5,$6,$7)
+      `,
+        [
+          t.fin,
+          t.competition,
+          t.categorie || null,
+          t.partenaire,
+          t.classementEquipe,
+          t.points,
+          "OK",
+        ]
+      );
+    }
 
     res.json({
       success: true,
       joueur,
+      tournoisCount: tournois.length,
     });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: err.message });
-  }
-});
-
-// -------------------------
-// DEBUG STATE
-// -------------------------
-app.get("/debug-state", async (req, res) => {
-  try {
-    const browser = await chromium.launch({
-      headless: true,
-    });
-
-    const page = await browser.newPage();
-
-    await page.goto(
-      "https://tenup.fft.fr/classement/7146157482/padel",
-      {
-        waitUntil: "domcontentloaded",
-      }
-    );
-
-    const state = await page.evaluate(() => {
-      return window.Drupal?.settings;
-    });
-
-    await browser.close();
-
-    res.json(state);
-  } catch (e) {
-    res.status(500).json({ error: e.message });
   }
 });
 
