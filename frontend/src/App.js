@@ -638,16 +638,18 @@ export default function App() {
   const poolProjetee = [...baseProjetee, ...tournoisMoisCourant];
   
   // 3. Nouveau top 12
-  const top12Projetee = poolProjetee
+  
+  const top12Projetee = [...poolProjetee]
     .sort((a, b) => b.point - a.point)
     .slice(0, 12);
+
   
   const pointsProjetes = top12Projetee.reduce(
     (s, t) => s + (t.point || 0),
     0
   );
   
-  const deltaPoints = pointsProjetes - pointsActuels;
+  const deltaPoints = pointsProjetes - totalPoints;
   const tranchesDisponibles = TRANCHES[form.type] || [];
   const pointsPreview = form.type && form.tranche && form.classement
     ? getPoints(form.type, form.tranche, parseInt(form.classement)) : null;
@@ -769,7 +771,7 @@ export default function App() {
           <div className="stat-value">{moyennePoints}</div>
         </div>
        <div className="stat-card" style={{
-          borderColor: deltaReel >= 0
+          borderColor: deltaPoints >= 0
             ? "rgba(0,230,118,0.3)"
             : "rgba(255,77,109,0.3)"
         }}>
@@ -777,9 +779,9 @@ export default function App() {
             Projection classement
           </div>
           <div className="stat-value" style={{
-            color: deltaReel >= 0 ? "var(--accent)" : "var(--red)"
+            color: deltaPoints >= 0 ? "var(--accent)" : "var(--red)"
           }}>
-            {deltaReel >= 0 ? "+" : ""}{deltaReel}
+            {deltaPoints >= 0 ? "+" : ""}{deltaPoints}
           </div>
         </div>
       </div>
