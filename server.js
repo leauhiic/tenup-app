@@ -129,32 +129,14 @@ async function scrapeTenup() {
   // -------------------------
   // EXTRACTION DRUPAL STATE (IMPORTANT)
   // -------------------------
-  const html = await page.content();
+  const data = await page.evaluate(() => {
+  const joueur = window.Drupal?.settings?.fft_fiche_joueur;
 
-  // 1. extraire tout le bloc Drupal.settings
-  const match = html.match(
-    /Drupal\.settings\s*=\s*({[\s\S]*?fft_fiche_joueur[\s\S]*?});/
-  );
-  
-  if (!match?.[1]) {
-    console.log("❌ Drupal.settings introuvable");
-    return null;
-  }
-  
-  // 2. parse safe
-  let settings;
-  
-  try {
-    settings = eval("(" + match[1] + ")");
-  } catch (e) {
-    console.log("❌ Parse error", e);
-    return null;
-  }
-  
-  // 3. extraction propre
-  const joueur = settings?.fft_fiche_joueur;
-  
-  return { joueur };
+  return {
+    joueur,
+    tournois: joueur?.fft_classement?.competition?.data?.rows || []
+  };
+});
 }
 
 // -------------------------
@@ -177,21 +159,21 @@ app.get("/scrape-tenup", async (req, res) => {
     }
 
     // Exemple mapping (à adapter selon tes besoins)
-    await db.query(
+    /await db.query(
       `
-      INSERT INTO tournois (date, nom, categorie, partenaire, classement, point, validite)
-      VALUES ($1,$2,$3,$4,$5,$6,$7)
-    `,
-      [
-        new Date().toISOString(),
-        `${joueur.nom} ${joueur.prenom}`,
-        joueur.pratiquePrincipale,
-        null,
-        joueur.echelon || 0,
-        0,
-        "OK",
-      ]
-    );
+    //  INSERT INTO tournois (date, nom, categorie, partenaire, classement, point, validite)
+    //  VALUES ($1,$2,$3,$4,$5,$6,$7)
+    //`,
+    //  [
+    //    new Date().toISOString(),
+    //    `${joueur.nom} ${joueur.prenom}`,
+    //    joueur.pratiquePrincipale,
+     //   null,
+     //   joueur.echelon || 0,
+     //   0,
+     //   "OK",
+     // ]
+    //);
 
     res.json({
       success: true,
