@@ -660,7 +660,28 @@ export default function App() {
     if (n === 3) return <span className="rank-badge bronze">3</span>;
     return <span className="rank-badge">{n}</span>;
   };
-
+  const progression = useMemo(() => {
+    const sortedByDate = [...tournois]
+      .map(t => ({
+        ...t,
+        dateObj: parseDate(t.date),
+        point: t.point || 0
+      }))
+      .sort((a, b) => a.dateObj - b.dateObj);
+  
+    let cumul = 0;
+  
+    return sortedByDate.map(t => {
+      cumul += t.point;
+      return {
+        date: t.date,
+        cumul,
+        point: t.point,
+        nom: t.nom
+      };
+    });
+  }, [tournois]);
+  
   return (
     <div className="tenup-app">
 
@@ -848,7 +869,34 @@ export default function App() {
           </table>
         )}
       </div>
-
+          
+      {/* Graphique évolution */}
+      <div className="section-header">
+        <div className="section-title">Progression</div>
+      </div>
+      
+      <div className="table-wrap">
+        <table className="data-table">
+          <thead>
+            <tr>
+              <th>Date</th>
+              <th>Tournoi</th>
+              <th>Points</th>
+              <th>Cumul</th>
+            </tr>
+          </thead>
+          <tbody>
+            {progression.map((p, i) => (
+              <tr key={i}>
+                <td className="dim">{p.date}</td>
+                <td>{p.nom}</td>
+                <td>{p.point}</td>
+                <td style={{ fontWeight: 700 }}>{p.cumul}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
       {/* ALERTE TOURNOIS PERDUS */}
       {tournoisPerdus.length > 0 && (
         <>
