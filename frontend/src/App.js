@@ -628,10 +628,26 @@ export default function App() {
     0
   );
   const pointsPerdus = tournoisExpirants.reduce((s, t) => s + (t.point || 0), 0);
-  const deltaPoints = pointsMoisCourant - pointsPerdus;
-  
-  
 
+  // 1. On enlève les expirants du classement actuel
+  const baseProjetee = actifsClassement.filter(t =>
+    !tournoisExpirants.includes(t)
+  );
+  
+  // 2. On ajoute les tournois du mois courant
+  const poolProjetee = [...baseProjetee, ...tournoisMoisCourant];
+  
+  // 3. Nouveau top 12
+  const top12Projetee = poolProjetee
+    .sort((a, b) => b.point - a.point)
+    .slice(0, 12);
+  
+  const pointsProjetes = top12Projetee.reduce(
+    (s, t) => s + (t.point || 0),
+    0
+  );
+  
+  const deltaPoints = pointsProjetes - pointsActuels;
   const tranchesDisponibles = TRANCHES[form.type] || [];
   const pointsPreview = form.type && form.tranche && form.classement
     ? getPoints(form.type, form.tranche, parseInt(form.classement)) : null;
@@ -752,18 +768,18 @@ export default function App() {
           <div className="stat-label">Moy. Top 12</div>
           <div className="stat-value">{moyennePoints}</div>
         </div>
-        <div className="stat-card" style={{
-          borderColor: deltaPoints >= 0
+       <div className="stat-card" style={{
+          borderColor: deltaReel >= 0
             ? "rgba(0,230,118,0.3)"
             : "rgba(255,77,109,0.3)"
         }}>
           <div className="stat-label">
-            Impact mois {moisLabel}
+            Projection classement
           </div>
           <div className="stat-value" style={{
-            color: deltaPoints >= 0 ? "var(--accent)" : "var(--red)"
+            color: deltaReel >= 0 ? "var(--accent)" : "var(--red)"
           }}>
-            {deltaPoints >= 0 ? "+" : ""}{deltaPoints}
+            {deltaReel >= 0 ? "+" : ""}{deltaReel}
           </div>
         </div>
       </div>
