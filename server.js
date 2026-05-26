@@ -1,11 +1,8 @@
+require("dotenv").config();
+
 const express = require("express");
 const cors = require("cors");
 const { chromium } = require("playwright");
-
-
-const TENUP_USER = "leau-hiic";
-const TENUP_PASSWORD = "31!Vosl!";
-
 const path = require("path");
 
 const app = express();
@@ -14,6 +11,14 @@ app.use(express.json());
 
 const db = require("./db");
 
+// 🔐 ENV VARS
+const TENUP_USER = process.env.TENUP_USER;
+const TENUP_PASSWORD = process.env.TENUP_PASSWORD;
+const SCRAPE_KEY = process.env.SCRAPE_KEY;
+
+// -------------------------
+// INIT DB
+// -------------------------
 app.get("/init-db", async (req, res) => {
   try {
     await db.query(`
@@ -36,17 +41,19 @@ app.get("/init-db", async (req, res) => {
   }
 });
 
+// -------------------------
+// HEALTH CHECK
+// -------------------------
 app.get("/", (req, res) => {
-  res.send("✅ Backend connecté TenUp OK");
+  res.send("✅ Backend TenUp OK");
 });
 
-// ✅ scraping automatique connecté
-
-
+// -------------------------
+// GET DATA
+// -------------------------
 app.get("/tournois", async (req, res) => {
   try {
-    const result = await db.query("SELECT * FROM tournois");
-
+    const result = await db.query("SELECT * FROM tournois ORDER BY date DESC");
     res.json(result.rows);
   } catch (err) {
     console.error(err);
@@ -54,170 +61,159 @@ app.get("/tournois", async (req, res) => {
   }
 });
 
+// -------------------------
+// INSERT MANUEL
+// -------------------------
 app.post("/tournois", async (req, res) => {
   const { date, nom, categorie, partenaire, classement, point, validite } = req.body;
 
   try {
     await db.query(
       `INSERT INTO tournois (date, nom, categorie, partenaire, classement, point, validite)
-       VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+       VALUES ($1,$2,$3,$4,$5,$6,$7)`,
       [date, nom, categorie, partenaire, classement, point, validite]
     );
 
     res.send("✅ Tournoi ajouté");
   } catch (err) {
+    console.error(err);
     res.status(500).json({ error: err.message });
   }
 });
 
+// -------------------------
+// IMPORT JSON
+// -------------------------
 const data = require("./tournois-202605.json");
 
 app.get("/import-from-2026mai", async (req, res) => {
   try {
-    // ⚠️ nettoie avant import (optionnel)
     await db.query("DELETE FROM tournois");
 
     for (const t of data) {
       await db.query(
         `INSERT INTO tournois (date, nom, categorie, partenaire, classement, point, validite)
-         VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+         VALUES ($1,$2,$3,$4,$5,$6,$7)`,
         [
-          t["Date"],
+          t.Date,
           t["Nom"],
           t["Catégorie"],
           t["Partenaire"],
           t["Classement"],
           t["Point"],
-          t["Validité"]
+          t["Validité"],
         ]
       );
     }
 
-    res.send("✅ Import réussi !");
+    res.send("✅ Import JSON terminé");
   } catch (err) {
     console.error(err);
     res.status(500).send(err.message);
   }
 });
 
-app.listen(3000, () => {
-  console.log("✅ Backend prêt");
-});
-
+// -------------------------
+// SCRAPER TENUP
+// -------------------------
 async function scrapeTenup() {
   const browser = await chromium.launch({
-    headless: false, // ✅ IMPORTANT pour debug
-    args: [
-      "--no-sandbox",
-      "--disable-setuid-sandbox",
-      "--disable-blink-features=AutomationControlled"
-    ]
+    headless: true,
   });
-  const context = await browser.newContext();
+
+  const context = await browser.newContext({
+    userAgent:
+      "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120 Safari/537.36",
+    locale: "fr-FR",
+    viewport: { width: 1280, height: 800 },
+  });
+
   const page = await context.newPage();
 
-  // 🔐 LOGIN
   await page.addInitScript(() => {
-    Object.defineProperty(navigator, 'webdriver', {
+    Object.defineProperty(navigator, "webdriver", {
       get: () => false,
     });
   });
-  await page.setUserAgent(
-  "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 " +
-  "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-);
 
+  // -------------------------
+  // LOGIN
+  // -------------------------
   await page.goto("https://tenup.fft.fr/classement/7146157482/padel", {
-  waitUntil: "networkidle"
-});
-
-// 🔐 Si redirigé vers login
-if (page.url().includes("login.fft.fr")) {
-  console.log("✅ Redirection vers login FFT");
-
-  // attendre les champs (selectors FFT)
-  await page.waitForSelector('input[name="username"]', { timeout: 15000 });
-
-  // remplir login FFT
-  await page.fill('input[name="username"]', TENUP_USER);
-  await page.fill('input[name="password"]', TENUP_PASSWORD);
-
-  // submit
-  await Promise.all([
-    page.waitForNavigation(),
-    page.click('button[type="submit"]')
-  ]);
-
-  console.log("✅ Login effectué");
-}
-
-// ✅ maintenant tu es connecté automatiquement
-
-  console.log("URL actuelle:", page.url());
-  await page.screenshot({ path: "debug.png" });
-
-  // 🎾 PAGE JOUEUR
-  
-await page.goto("https://tenup.fft.fr", {
-  waitUntil: "domcontentloaded"
-});
-
-await page.waitForTimeout(3000);
-
-// ensuite
-
-
- await page.goto("https://tenup.fft.fr/classement/7146157482/padel", {
-    waitUntil: "domcontentloaded"
+    waitUntil: "networkidle",
   });
-  
-  // attendre que la page AJAX se stabilise
-  await page.waitForLoadState("networkidle");
-  
-  // attendre les données (pas juste le DOM)
-  await page.waitForFunction(() => {
-    return document.querySelectorAll("#custom-table tbody tr").length > 0;
-  }, { timeout: 30000 });
-  
-  // petit délai sécurité
-  await page.waitForTimeout(2000);
-  
-  // 📊 SCRAP
+
+  if (page.url().includes("login.fft.fr")) {
+    console.log("🔐 Login requis");
+
+    await page.waitForSelector('input[name="username"]', { timeout: 15000 });
+
+    await page.fill('input[name="username"]', TENUP_USER);
+    await page.fill('input[name="password"]', TENUP_PASSWORD);
+
+    await Promise.all([
+      page.waitForNavigation({ waitUntil: "networkidle" }),
+      page.click('button[type="submit"]'),
+    ]);
+
+    console.log("✅ Login OK");
+  }
+
+  // -------------------------
+  // PAGE CLASSEMENT
+  // -------------------------
+  await page.goto("https://tenup.fft.fr/classement/7146157482/padel", {
+    waitUntil: "networkidle",
+  });
+
+  await page.waitForSelector("#custom-table tbody tr", { timeout: 30000 });
+
+  // -------------------------
+  // SCRAP DATA
+  // -------------------------
   const tournois = await page.evaluate(() => {
     const rows = document.querySelectorAll("#custom-table tbody tr");
-  
-    return [...rows].map(row => {
+
+    const get = (cols, i) =>
+      cols[i]?.innerText?.trim() ? cols[i].innerText.trim() : null;
+
+    return Array.from(rows).map((row) => {
       const cols = row.querySelectorAll("td");
-  
+
       return {
-        date: cols[0]?.innerText.trim(),
-        nom: cols[1]?.innerText.trim(),
-        categorie: cols[2]?.innerText.trim(),
-        epreuve: cols[3]?.innerText.trim(),
-        partenaire: cols[4]?.innerText.trim(),
+        date: get(cols, 0),
+        nom: get(cols, 1),
+        categorie: get(cols, 2),
+        epreuve: get(cols, 3),
+        partenaire: get(cols, 4),
         classement: parseInt(cols[5]?.innerText) || 0,
         point: parseInt(cols[6]?.innerText) || 0,
-        validite: cols[7]?.innerText.trim(),
+        validite: get(cols, 7),
       };
     });
   });
 
   await browser.close();
-
   return tournois;
 }
 
+// -------------------------
+// ENDPOINT SCRAP
+// -------------------------
 app.get("/scrape-tenup", async (req, res) => {
   try {
+    if (req.query.key !== SCRAPE_KEY) {
+      return res.status(403).send("❌ Forbidden");
+    }
+
     const tournois = await scrapeTenup();
 
-    // option : on vide avant
     await db.query("DELETE FROM tournois");
 
     for (const t of tournois) {
       await db.query(
         `INSERT INTO tournois (date, nom, categorie, partenaire, classement, point, validite)
-         VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+         VALUES ($1,$2,$3,$4,$5,$6,$7)`,
         [
           t.date,
           t.nom,
@@ -230,15 +226,26 @@ app.get("/scrape-tenup", async (req, res) => {
       );
     }
 
-    res.json({ success: true, count: tournois.length });
-
+    res.json({
+      success: true,
+      count: tournois.length,
+    });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: err.message });
   }
 });
 
-
+// -------------------------
+// DEBUG IMAGE
+// -------------------------
 app.get("/debug-image", (req, res) => {
   res.sendFile(path.join(__dirname, "debug.png"));
+});
+
+// -------------------------
+// START SERVER
+// -------------------------
+app.listen(3000, () => {
+  console.log("🚀 Backend prêt sur http://localhost:3000");
 });
