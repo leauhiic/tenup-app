@@ -135,6 +135,8 @@ if (page.url().includes("login.fft.fr")) {
 
 // ✅ maintenant tu es connecté automatiquement
 
+  console.log("URL actuelle:", page.url());
+  await page.screenshot({ path: "debug.png" });
 
   // 🎾 PAGE JOUEUR
  await page.goto("https://tenup.fft.fr/classement/7146157482/padel", {
