@@ -67,174 +67,44 @@ app.get("/tournois", async (req, res) => {
 async function scrapeTenup() {
   const browser = await chromium.launch({
     headless: true,
-    args: [
-      "--no-sandbox",
-      "--disable-setuid-sandbox",
-      "--disable-dev-shm-usage",
-    ],
+    args: ["--no-sandbox", "--disable-setuid-sandbox"],
   });
 
   const context = await browser.newContext();
   const page = await context.newPage();
 
-  // anti-bot léger
-  await page.addInitScript(() => {
-    Object.defineProperty(navigator, "webdriver", {
-      get: () => false,
-    });
+  let apiCalls = [];
+
+  // 🔥 capture toutes les réponses JSON
+  page.on("response", async (response) => {
+    const url = response.url();
+
+    if (
+      url.includes("classement") ||
+      url.includes("padel") ||
+      url.includes("joueur") ||
+      url.includes("competition")
+    ) {
+      try {
+        const json = await response.json();
+        apiCalls.push({ url, json });
+      } catch (e) {}
+    }
   });
 
   const url =
     "https://tenup.fft.fr/classement/7146157482/padel";
 
-  try {
-    // -------------------------
-    // LOAD PAGE
-    // -------------------------
-    await page.goto(url, { waitUntil: "networkidle" });
+  await page.goto(url, { waitUntil: "networkidle" });
 
-    await page.waitForTimeout(3000);
+  await page.waitForTimeout(8000);
 
-    // -------------------------
-    // LOGIN IF NEEDED
-    // -------------------------
-    if (await page.locator('input[name="username"]').count() > 0) {
-      console.log("🔐 Login requis");
+  await browser.close();
 
-      await page.fill('input[name="username"]', TENUP_USER);
-      await page.fill('input[name="password"]', TENUP_PASSWORD);
-
-      await Promise.all([
-        page.waitForNavigation({ waitUntil: "networkidle" }),
-        page.click('button[type="submit"]'),
-      ]);
-
-      console.log("✅ Login OK");
-    }
-
-    // -------------------------
-    // FINAL LOAD
-    // -------------------------
-    await page.goto(url, { waitUntil: "networkidle" });
-
-    await page.waitForTimeout(5000);
-
-    // -------------------------
-    // DEBUG FLAGS (IMPORTANT)
-    // -------------------------
-    const debug = await page.evaluate(() => {
-      return {
-        hasWindow: !!window,
-        hasDrupal: !!window.Drupal,
-        hasDrupalSettings: !!window.drupalSettings,
-      };
-    });
-
-    console.log("🔎 DEBUG:", debug);
-
-    // -------------------------
-    // EXTRACTION SAFE MULTI-SOURCE
-    // -------------------------
-    const data = await page.evaluate(() => {
-      const joueur =
-        window.drupalSettings?.fft_fiche_joueur ||
-        window.Drupal?.settings?.fft_fiche_joueur ||
-        null;
-
-      const tournois =
-        joueur?.fft_classement?.competition?.data?.rows || [];
-
-      return {
-        joueur,
-        tournois,
-      };
-    });
-
-    // -------------------------
-    // FALLBACK DEBUG HTML (si vide)
-    // -------------------------
-    if (!data.joueur) {
-      const html = await page.content();
-
-      return {
-        error: "NO_DRUPAL_DATA",
-        debug,
-        htmlSnippet: html.slice(0, 3000),
-      };
-    }
-
-    return data;
-  } catch (err) {
-    console.error("❌ scrape error:", err);
-    return {
-      error: err.message,
-    };
-  } finally {
-    await browser.close();
-  }
+  return {
+    apiCalls,
+  };
 }
-
-// -------------------------
-// SCRAPE ENDPOINT
-// -------------------------
-app.get("/scrape-tenup", async (req, res) => {
-  try {
-    if (req.query.key !== SCRAPE_KEY) {
-      return res.status(403).send("❌ Forbidden");
-    }
-
-    const data = await scrapeTenup();
-
-    if (data?.error) {
-      return res.status(500).json(data);
-    }
-
-    if (!data?.joueur) {
-      return res.status(500).json({
-        error: "Aucune donnée trouvée",
-        debug: data,
-      });
-    }
-
-    const { joueur, tournois } = data;
-
-    // -------------------------
-    // INSERT DB
-    // -------------------------
-    for (const t of tournois) {
-      await db.query(
-        `
-        INSERT INTO tournois 
-        (date, nom, categorie, partenaire, classement, point, validite)
-        VALUES ($1,$2,$3,$4,$5,$6,$7)
-      `,
-        [
-          t.fin,
-          t.competition,
-          t.categorie || null,
-          t.partenaire,
-          t.classementEquipe,
-          t.points,
-          "OK",
-        ]
-      );
-    }
-
-    res.json({
-      success: true,
-      joueur: {
-        nom: joueur.nom,
-        prenom: joueur.prenom,
-        classement:
-          joueur?.fft_classement?.dernierClassement?.rang,
-      },
-      tournoisCount: tournois.length,
-    });
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: err.message });
-  }
-});
 
 // -------------------------
 // DEBUG ENDPOINT
