@@ -109,21 +109,32 @@ async function scrapeTenup() {
   const page = await context.newPage();
 
   // 🔐 LOGIN
-  await page.goto("https://tenup.fft.fr/connexion", {
-    waitUntil: "networkidle",
-  });
+  await page.goto("https://tenup.fft.fr/classement/7146157482/padel", {
+  waitUntil: "networkidle"
+});
 
-  
-  
-  await page.fill('#username', TENUP_USER);
-  await page.fill('#password', TENUP_PASSWORD);
+// 🔐 Si redirigé vers login
+if (page.url().includes("login.fft.fr")) {
+  console.log("✅ Redirection vers login FFT");
 
+  // attendre les champs (selectors FFT)
+  await page.waitForSelector('input[name="username"]', { timeout: 15000 });
 
+  // remplir login FFT
+  await page.fill('input[name="username"]', TENUP_USER);
+  await page.fill('input[name="password"]', TENUP_PASSWORD);
 
+  // submit
   await Promise.all([
     page.waitForNavigation(),
-    page.click('button[type="submit"]'),
+    page.click('button[type="submit"]')
   ]);
+
+  console.log("✅ Login effectué");
+}
+
+// ✅ maintenant tu es connecté automatiquement
+
 
   // 🎾 PAGE JOUEUR
   await page.goto("https://tenup.fft.fr/classement/7146157482/padel", {
