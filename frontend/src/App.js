@@ -717,6 +717,9 @@ export default function App() {
   
     return history;
   }, [tournois]);
+
+  console.log("TOURNOIS:", tournois);
+  console.log("PROGRESSION:", progressionTop12);
   return (
     <div className="tenup-app">
 
