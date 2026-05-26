@@ -694,36 +694,51 @@ export default function App() {
     });
   }, [tournois]);
 
+  // ─────────────────────────────────────────────
+  // 13 MOIS GLISSANTS (5 mois avant à +7 mois)
+  // ─────────────────────────────────────────────
+  const months = useMemo(() => {
+    return Array.from({ length: 13 }, (_, i) => {
+      const d = addMonths(startOfMonth(now), i - 12);
+      return {
+        label: monthKey(d),
+        date: d
+      };
+    });
+  }, []);
+
+  // ─────────────────────────────────────────────
+  // TOP 12 PAR MOIS
+  // ─────────────────────────────────────────────
   const progressionTop12 = useMemo(() => {
-    if (!tournois || tournois.length === 0) return [];
-  
-    const sorted = [...tournois]
-      .map(t => ({
-        ...t,
-        dateObj: parseDate(t.date),
-        point: Number(t.point || 0)
-      }))
-      .sort((a, b) => a.dateObj - b.dateObj);
-  
-    let history = [];
-  
-    for (let i = 0; i < sorted.length; i++) {
-      const slice = sorted.slice(0, i + 1);
-  
-      const top12 = [...slice]
-        .sort((a, b) => b.point - a.point)
+    if (!tournois.length) return [];
+
+    const normalized = tournois.map(t => ({
+      ...t,
+      dateObj: parseDate(t.date),
+      point: Number(t.point || 0)
+    }));
+
+    return months.map((m, idx) => {
+      const endMonth = new Date(m.date.getFullYear(), m.date.getMonth() + 1, 0);
+
+      const pool = normalized.filter(t =>
+        t.dateObj <= endMonth
+      );
+
+      const top12 = [...pool]
+        .sort((a,b) => b.point - a.point)
         .slice(0, 12);
-  
-      const sum = top12.reduce((s, t) => s + (Number(t.point) || 0), 0);
-  
-      history.push({
-        date: sorted[i].date,
-        top12: sum
-      });
-    }
-  
-    return history;
-  }, [tournois]);
+
+      const sum = top12.reduce((s,t) => s + t.point, 0);
+
+      return {
+        month: m.label,
+        top12: sum,
+        isFuture: m.date > startOfMonth(now)
+      };
+    });
+  }, [tournois, months]);
 
   console.log("TOURNOIS:", tournois);
   console.log("PROGRESSION:", progressionTop12);
@@ -916,13 +931,34 @@ export default function App() {
       </div>
           
       {/* PROGRESSION TOP 12 */}
-      <div style={{ width: "100%", height: 300 }}>
+      {/* CHART 13 MOIS */}
+      <div style={{ width: "100%", height: 320 }}>
         <ResponsiveContainer>
-          <LineChart data={progressionTop12}>
-            <XAxis dataKey="date" />
+          <LineChart>
+            <XAxis dataKey="month" type="category" />
             <YAxis />
             <Tooltip />
-            <Line type="monotone" dataKey="top12" stroke="#00e676" strokeWidth={2} dot />
+
+            {/* RÉEL */}
+            <Line
+              data={realData}
+              type="monotone"
+              dataKey="top12"
+              stroke="#00e676"
+              strokeWidth={3}
+              dot
+            />
+
+            {/* PROJECTION (pointillé) */}
+            <Line
+              data={projectedData}
+              type="monotone"
+              dataKey="top12"
+              stroke="#00e676"
+              strokeDasharray="6 6"
+              strokeWidth={2}
+              dot={false}
+            />
           </LineChart>
         </ResponsiveContainer>
       </div>
