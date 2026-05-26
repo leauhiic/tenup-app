@@ -24,9 +24,12 @@ const LOGIN_URL = "https://login.fft.fr/";
 // =========================
 app.get("/init-session", async (req, res) => {
   try {
-    const browser = await chromium.launch({
-      headless: false, // IMPORTANT pour login interactif
-      args: ["--no-sandbox", "--disable-setuid-sandbox"],
+    const browser = await cchromium.launch({
+      headless: true,
+      args: [
+        "--no-sandbox",
+        "--disable-setuid-sandbox"
+      ]
     });
 
     const context = await browser.newContext();
