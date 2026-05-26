@@ -9,32 +9,82 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-// -------------------------
-// ENV
-// -------------------------
-const FFT_USER = process.env.TENUP_USER;
-const FFT_PASSWORD = process.env.TENUP_PASSWORD;
-
 const STATE_PATH = "./storageState.json";
 
-const TENUP_URL =
+const URL =
   "https://tenup.fft.fr/classement/7146157482/padel";
 
-const LOGIN_URL = "https://login.fft.fr/";
-
 // -------------------------
-// INIT
+// HEALTH
 // -------------------------
 app.get("/", (req, res) => {
-  res.send("🚀 FFT / TenUp scraper API OK");
+  res.send("🚀 TenUp scraper OK (session mode)");
 });
 
 // -------------------------
-// LOGIN FFT SSO
+// SCRAPE HTML COMPLET
 // -------------------------
-async function loginFFT() {
+async function scrapeTenup() {
   const browser = await chromium.launch({
     headless: true,
+    args: ["--no-sandbox", "--disable-setuid-sandbox"],
+  });
+
+  if (!fs.existsSync(STATE_PATH)) {
+    throw new Error(
+      "❌ Pas de session. Lance d'abord node login-once.js"
+    );
+  }
+
+  const context = await browser.newContext({
+    storageState: STATE_PATH,
+  });
+
+  const page = await context.newPage();
+
+  console.log("🌐 Chargement TenUp avec session...");
+
+  await page.goto(URL, {
+    waitUntil: "networkidle",
+  });
+
+  await page.waitForTimeout(4000);
+
+  const html = await page.content();
+
+  const debug = await page.evaluate(() => {
+    return {
+      url: window.location.href,
+      hasDrupal: !!window.Drupal,
+      hasSettings: !!window.Drupal?.settings,
+      title: document.title,
+      bodyPreview: document.body?.innerText?.slice(0, 300),
+    };
+  });
+
+  await browser.close();
+
+  return { html, debug };
+}
+
+// -------------------------
+// ENDPOINT SCRAPE
+// -------------------------
+app.get("/scrape", async (req, res) => {
+  try {
+    const data = await scrapeTenup();
+    res.json(data);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// -------------------------
+// START
+// -------------------------
+app.listen(3000, () => {
+  console.log("🚀 Server running on http://localhost:3000");
+});    headless: true,
     args: ["--no-sandbox", "--disable-setuid-sandbox"],
   });
 
