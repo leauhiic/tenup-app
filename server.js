@@ -3,6 +3,7 @@ const cors = require("cors");
 const { chromium } = require("playwright");
 
 
+
 const app = express();
 app.use(cors());
 app.use(express.json());
@@ -109,8 +110,10 @@ async function scrapeTenup() {
     waitUntil: "networkidle",
   });
 
-  await page.fill('input[type="email"]', "leau-hiic");
-  await page.fill('input[type="password"]', "31!Vosl!");
+  
+  await page.fill('#username', process.env.TENUP_USER);
+  await page.fill('#password', process.env.TENUP_PASSWORD);
+
 
   await Promise.all([
     page.waitForNavigation(),
