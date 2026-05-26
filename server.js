@@ -105,11 +105,28 @@ app.listen(3000, () => {
 });
 
 async function scrapeTenup() {
-  const browser = await chromium.launch({ headless: true });
+  const browser = await chromium.launch({
+    headless: false, // ✅ IMPORTANT pour debug
+    args: [
+      "--no-sandbox",
+      "--disable-setuid-sandbox",
+      "--disable-blink-features=AutomationControlled"
+    ]
+  });
   const context = await browser.newContext();
   const page = await context.newPage();
 
   // 🔐 LOGIN
+  await page.addInitScript(() => {
+    Object.defineProperty(navigator, 'webdriver', {
+      get: () => false,
+    });
+  });
+  await page.setUserAgent(
+  "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 " +
+  "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+);
+
   await page.goto("https://tenup.fft.fr/classement/7146157482/padel", {
   waitUntil: "networkidle"
 });
@@ -140,6 +157,16 @@ if (page.url().includes("login.fft.fr")) {
   await page.screenshot({ path: "debug.png" });
 
   // 🎾 PAGE JOUEUR
+  
+await page.goto("https://tenup.fft.fr", {
+  waitUntil: "domcontentloaded"
+});
+
+await page.waitForTimeout(3000);
+
+// ensuite
+
+
  await page.goto("https://tenup.fft.fr/classement/7146157482/padel", {
     waitUntil: "domcontentloaded"
   });
@@ -177,7 +204,7 @@ if (page.url().includes("login.fft.fr")) {
 
   await browser.close();
 
-  return data;
+  return tournois;
 }
 
 app.get("/scrape-tenup", async (req, res) => {
