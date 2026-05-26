@@ -142,23 +142,26 @@ if (page.url().includes("login.fft.fr")) {
   });
 
   // attend le tableau
-  await page.waitForSelector("table");
-
+  await page.waitForSelector("#custom-table tbody tr", {
+    timeout: 20000
+  });
+  
   // 📊 SCRAP
-  const data = await page.evaluate(() => {
-    const rows = document.querySelectorAll("tbody tr");
-
+  const tournois = await page.evaluate(() => {
+    const rows = document.querySelectorAll("#custom-table tbody tr");
+  
     return [...rows].map(row => {
       const cols = row.querySelectorAll("td");
-
+  
       return {
         date: cols[0]?.innerText.trim(),
         nom: cols[1]?.innerText.trim(),
-        categorie: "", // TenUp ne le donne pas toujours
-        partenaire: cols[2]?.innerText.trim(),
-        classement: parseInt(cols[3]?.innerText) || 0,
-        point: parseInt(cols[4]?.innerText) || 0,
-        validite: "",
+        categorie: cols[2]?.innerText.trim(),
+        epreuve: cols[3]?.innerText.trim(),
+        partenaire: cols[4]?.innerText.trim(),
+        classement: parseInt(cols[5]?.innerText) || 0,
+        point: parseInt(cols[6]?.innerText) || 0,
+        validite: cols[7]?.innerText.trim(),
       };
     });
   });
