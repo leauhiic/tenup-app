@@ -1,145 +1,98 @@
-require("dotenv").config();
-
 const express = require("express");
 const cors = require("cors");
-const fs = require("fs");
-const path = require("path");
-const { chromium } = require("playwright");
 
 const app = express();
 app.use(cors());
 app.use(express.json());
 
-const SCRAPE_KEY = process.env.SCRAPE_KEY;
+const db = require("./db");
 
-const STORAGE_PATH = path.join(__dirname, "storageState.json");
-
-const URL =
-  "https://tenup.fft.fr/classement/7146157482/padel";
-
-const LOGIN_URL = "https://login.fft.fr/";
-
-// =========================
-// INIT SESSION (RAILWAY ONLY)
-// =========================
-app.get("/init-session", async (req, res) => {
+app.get("/init-db", async (req, res) => {
   try {
-    const browser = await chromium.launch({
-      headless: true,
-      args: [
-        "--no-sandbox",
-        "--disable-setuid-sandbox"
-      ]
-    });
+    await db.query(`
+      CREATE TABLE IF NOT EXISTS tournois (
+        id SERIAL PRIMARY KEY,
+        date TEXT,
+        nom TEXT,
+        categorie TEXT,
+        partenaire TEXT,
+        classement INTEGER,
+        point INTEGER,
+        validite TEXT
+      )
+    `);
 
-    const context = await browser.newContext();
-    const page = await context.newPage();
-
-    await page.goto(LOGIN_URL);
-
-    res.write(
-      "👉 Connecte-toi dans la fenêtre Playwright...\n"
-    );
-
-    // attendre redirection après login
-    await page.waitForURL("**tenup.fft.fr**", {
-      timeout: 0,
-    });
-
-    await context.storageState({
-      path: STORAGE_PATH,
-    });
-
-    await browser.close();
-
-    res.end("✅ Session enregistrée sur Railway");
+    res.send("✅ Table créée avec succès");
   } catch (err) {
+    console.error(err);
     res.status(500).send(err.message);
   }
 });
 
-// =========================
-// SCRAPER
-// =========================
-async function scrapeTenup() {
-  const browser = await chromium.launch({
-    headless: true,
-    args: ["--no-sandbox", "--disable-setuid-sandbox"],
-  });
+app.get("/", (req, res) => {
+  res.send("✅ Backend connecté TenUp OK");
+});
 
-  const context = fs.existsSync(STORAGE_PATH)
-    ? await browser.newContext({
-        storageState: STORAGE_PATH,
-      })
-    : await browser.newContext();
+// ✅ scraping automatique connecté
 
-  const page = await context.newPage();
 
-  await page.goto(URL, {
-    waitUntil: "networkidle",
-  });
-
-  await page.waitForTimeout(4000);
-
-  const debug = await page.evaluate(() => ({
-    url: location.href,
-    hasDrupal: !!window.Drupal,
-    keys: window.Drupal?.settings
-      ? Object.keys(window.Drupal.settings)
-      : [],
-    text: document.body.innerText.slice(0, 600),
-  }));
-
-  const data = await page.evaluate(() => {
-    const joueur = window.Drupal?.settings?.fft_fiche_joueur;
-
-    return {
-      joueur,
-      tournois:
-        joueur?.fft_classement?.competition?.data?.rows ||
-        [],
-    };
-  });
-
-  await browser.close();
-
-  return { debug, ...data };
-}
-
-// =========================
-// ENDPOINT SCRAPE
-// =========================
-app.get("/scrape-tenup", async (req, res) => {
+app.get("/tournois", async (req, res) => {
   try {
-    if (req.query.key !== SCRAPE_KEY) {
-      return res.status(403).send("Forbidden");
-    }
+    const result = await db.query("SELECT * FROM tournois");
 
-    const data = await scrapeTenup();
-
-    res.json({
-      success: true,
-      debug: data.debug,
-      tournois: data.tournois,
-      joueur: data.joueur,
-    });
+    res.json(result.rows);
   } catch (err) {
-    res.status(500).json({
-      error: err.message,
-    });
+    console.error(err);
+    res.status(500).json({ error: err.message });
   }
 });
 
-// =========================
-// HEALTH
-// =========================
-app.get("/", (req, res) => {
-  res.send("🚀 TenUp Railway API OK");
+app.post("/tournois", async (req, res) => {
+  const { date, nom, categorie, partenaire, classement, point, validite } = req.body;
+
+  try {
+    await db.query(
+      `INSERT INTO tournois (date, nom, categorie, partenaire, classement, point, validite)
+       VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+      [date, nom, categorie, partenaire, classement, point, validite]
+    );
+
+    res.send("✅ Tournoi ajouté");
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
-// =========================
-// START
-// =========================
+const data = require("./tournois-202605.json");
+
+app.get("/import-from-2026mai", async (req, res) => {
+  try {
+    // ⚠️ nettoie avant import (optionnel)
+    await db.query("DELETE FROM tournois");
+
+    for (const t of data) {
+      await db.query(
+        `INSERT INTO tournois (date, nom, categorie, partenaire, classement, point, validite)
+         VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+        [
+          t["Date"],
+          t["Nom"],
+          t["Catégorie"],
+          t["Partenaire"],
+          t["Classement"],
+          t["Point"],
+          t["Validité"]
+        ]
+      );
+    }
+
+    res.send("✅ Import réussi !");
+  } catch (err) {
+    console.error(err);
+    res.status(500).send(err.message);
+  }
+});
+
 app.listen(3000, () => {
-  console.log("🚀 Server running on Railway");
+  console.log("✅ Backend prêt");
 });
