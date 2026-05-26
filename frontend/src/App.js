@@ -712,7 +712,7 @@ export default function App() {
       };
     });
   }, []);
-
+  
   // ─────────────────────────────────────────────
   // TOP 12 PAR MOIS
   // ─────────────────────────────────────────────
@@ -748,6 +748,25 @@ export default function App() {
   
   const realData = progressionTop12.filter(p => !p.isFuture);
   const projectedData = progressionTop12;
+  
+  const cleanData = Array.from(
+    new Map(progressionTop12.map(x => [x.month, x])).values()
+  );
+
+  const chartData = useMemo(() => {
+    if (!progressionTop12?.length) return [];
+  
+    const normalized = progressionTop12.map(d => ({
+      month: d.month,
+      real: d.top12,
+      projected: d.top12 // pour l’instant même valeur, tu peux améliorer après
+    }));
+  
+    // anti doublons (CRUCIAL pour Recharts)
+    return Array.from(
+      new Map(normalized.map(x => [x.month, x])).values()
+    );
+  }, [progressionTop12]);
   
   console.log("TOURNOIS:", tournois);
   console.log("PROGRESSION:", progressionTop12);
@@ -941,33 +960,46 @@ export default function App() {
           
       {/* PROGRESSION TOP 12 */}
       {/* CHART 13 MOIS */}
-      <div style={{ width: "100%", height: 320 }}>
+      <div style={{ width: "100%", height: 340 }}>
         <ResponsiveContainer>
-          <LineChart>
-            <XAxis dataKey="month" type="category" />
+          <LineChart data={chartData}>
+            
+            <XAxis
+              dataKey="month"
+              interval={0}
+              tick={{ fontSize: 12 }}
+            />
+      
             <YAxis />
-            <Tooltip />
-
-            {/* RÉEL */}
+      
+            <Tooltip
+              contentStyle={{
+                background: "#13161b",
+                border: "1px solid rgba(255,255,255,0.1)",
+                borderRadius: 8
+              }}
+            />
+      
+            {/* LIGNE RÉELLE */}
             <Line
-              data={realData}
               type="monotone"
-              dataKey="top12"
+              dataKey="real"
               stroke="#00e676"
               strokeWidth={3}
-              dot
+              dot={{ r: 3 }}
+              activeDot={{ r: 6 }}
             />
-
-            {/* PROJECTION (pointillé) */}
+      
+            {/* PROJECTION */}
             <Line
-              data={projectedData}
               type="monotone"
-              dataKey="top12"
+              dataKey="projected"
               stroke="#00e676"
-              strokeDasharray="6 6"
               strokeWidth={2}
+              strokeDasharray="6 6"
               dot={false}
             />
+      
           </LineChart>
         </ResponsiveContainer>
       </div>
