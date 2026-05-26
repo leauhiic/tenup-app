@@ -130,17 +130,31 @@ async function scrapeTenup() {
   // EXTRACTION DRUPAL STATE (IMPORTANT)
   // -------------------------
   const html = await page.content();
+
+  // 1. extraire tout le bloc Drupal.settings
+  const match = html.match(
+    /Drupal\.settings\s*=\s*({[\s\S]*?fft_fiche_joueur[\s\S]*?});/
+  );
   
-  const joueur = html
-    .match(/"fft_fiche_joueur"\s*:\s*({.*?})\s*,\s*"vuejs_context"/s);
-  
-  let data = null;
-  
-  if (joueur?.[1]) {
-    data = JSON.parse(joueur[1]);
+  if (!match?.[1]) {
+    console.log("❌ Drupal.settings introuvable");
+    return null;
   }
   
-  return data;
+  // 2. parse safe
+  let settings;
+  
+  try {
+    settings = eval("(" + match[1] + ")");
+  } catch (e) {
+    console.log("❌ Parse error", e);
+    return null;
+  }
+  
+  // 3. extraction propre
+  const joueur = settings?.fft_fiche_joueur;
+  
+  return { joueur };
 }
 
 // -------------------------
