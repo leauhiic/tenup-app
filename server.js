@@ -1,5 +1,7 @@
 const express = require("express");
 const cors = require("cors");
+const { chromium } = require("playwright");
+
 
 const app = express();
 app.use(cors());
@@ -95,4 +97,85 @@ app.get("/import-from-2026mai", async (req, res) => {
 
 app.listen(3000, () => {
   console.log("✅ Backend prêt");
+});
+
+async function scrapeTenup() {
+  const browser = await chromium.launch({ headless: true });
+  const context = await browser.newContext();
+  const page = await context.newPage();
+
+  // 🔐 LOGIN
+  await page.goto("https://tenup.fft.fr/connexion", {
+    waitUntil: "networkidle",
+  });
+
+  await page.fill('input[type="email"]', "leau-hiic");
+  await page.fill('input[type="password"]', "31!Vosl!");
+
+  await Promise.all([
+    page.waitForNavigation(),
+    page.click('button[type="submit"]'),
+  ]);
+
+  // 🎾 PAGE JOUEUR
+  await page.goto("https://tenup.fft.fr/classement/7146157482/padel", {
+    waitUntil: "networkidle",
+  });
+
+  // attend le tableau
+  await page.waitForSelector("table");
+
+  // 📊 SCRAP
+  const data = await page.evaluate(() => {
+    const rows = document.querySelectorAll("tbody tr");
+
+    return [...rows].map(row => {
+      const cols = row.querySelectorAll("td");
+
+      return {
+        date: cols[0]?.innerText.trim(),
+        nom: cols[1]?.innerText.trim(),
+        categorie: "", // TenUp ne le donne pas toujours
+        partenaire: cols[2]?.innerText.trim(),
+        classement: parseInt(cols[3]?.innerText) || 0,
+        point: parseInt(cols[4]?.innerText) || 0,
+        validite: "",
+      };
+    });
+  });
+
+  await browser.close();
+
+  return data;
+}
+
+app.get("/scrape-tenup", async (req, res) => {
+  try {
+    const tournois = await scrapeTenup();
+
+    // option : on vide avant
+    await db.query("DELETE FROM tournois");
+
+    for (const t of tournois) {
+      await db.query(
+        `INSERT INTO tournois (date, nom, categorie, partenaire, classement, point, validite)
+         VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+        [
+          t.date,
+          t.nom,
+          t.categorie,
+          t.partenaire,
+          t.classement,
+          t.point,
+          t.validite,
+        ]
+      );
+    }
+
+    res.json({ success: true, count: tournois.length });
+
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: err.message });
+  }
 });
