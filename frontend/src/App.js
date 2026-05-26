@@ -47,6 +47,42 @@ function getValidite(dateStr) {
     + "-" + String(future.getFullYear()).slice(-2);
 }
 
+function simulateTop12(tournois, monthsForward = 12) {
+  const base = [...tournois].map(t => ({
+    ...t,
+    dateObj: new Date(t.date),
+    point: Number(t.point || 0)
+  }));
+
+  const results = [];
+
+  for (let i = 0; i < monthsForward; i++) {
+    const refDate = new Date();
+    refDate.setMonth(refDate.getMonth() + i);
+
+    const windowStart = new Date(refDate);
+    windowStart.setMonth(windowStart.getMonth() - 12);
+
+    // fenêtre glissante
+    const window = base.filter(t =>
+      t.dateObj >= windowStart &&
+      t.dateObj <= refDate
+    );
+
+    const top12 = [...window]
+      .sort((a, b) => b.point - a.point)
+      .slice(0, 12);
+
+    const sum = top12.reduce((s, t) => s + t.point, 0);
+
+    results.push({
+      month: refDate.toLocaleDateString("fr-FR", { month: "short", year: "2-digit" }),
+      projected: sum
+    });
+  }
+
+  return results;
+}
 const EMPTY_FORM = {
   date: "", nom: "", type: "P250", tranche: "17-20",
   categorie: "DM", partenaire: "", classement: "", point: "", validite: "",
@@ -754,19 +790,21 @@ export default function App() {
   );
 
   const chartData = useMemo(() => {
-    if (!progressionTop12?.length) return [];
+    if (!tournois.length) return [];
   
-    const normalized = progressionTop12.map(d => ({
+    // 1. réel (12 mois actuels)
+    const real = progressionTop12.map(d => ({
       month: d.month,
       real: d.top12,
-      projected: d.top12 // pour l’instant même valeur, tu peux améliorer après
+      projected: null
     }));
   
-    // anti doublons (CRUCIAL pour Recharts)
-    return Array.from(
-      new Map(normalized.map(x => [x.month, x])).values()
-    );
-  }, [progressionTop12]);
+    // 2. projection futur
+    const projected = simulateTop12(tournois, 12);
+  
+    // 3. fusion
+    return [...real, ...projected];
+  }, [tournois, progressionTop12]);
   
   console.log("TOURNOIS:", tournois);
   console.log("PROGRESSION:", progressionTop12);
@@ -963,31 +1001,19 @@ export default function App() {
       <div style={{ width: "100%", height: 340 }}>
         <ResponsiveContainer>
           <LineChart data={chartData}>
-            
-            <XAxis
-              dataKey="month"
-              interval={0}
-              tick={{ fontSize: 12 }}
-            />
       
+            <XAxis dataKey="month" interval={0} />
             <YAxis />
+            <Tooltip />
       
-            <Tooltip
-              contentStyle={{
-                background: "#13161b",
-                border: "1px solid rgba(255,255,255,0.1)",
-                borderRadius: 8
-              }}
-            />
-      
-            {/* LIGNE RÉELLE */}
+            {/* RÉEL */}
             <Line
               type="monotone"
               dataKey="real"
               stroke="#00e676"
               strokeWidth={3}
-              dot={{ r: 3 }}
-              activeDot={{ r: 6 }}
+              dot
+              connectNulls={false}
             />
       
             {/* PROJECTION */}
@@ -995,9 +1021,10 @@ export default function App() {
               type="monotone"
               dataKey="projected"
               stroke="#00e676"
-              strokeWidth={2}
               strokeDasharray="6 6"
+              strokeWidth={2}
               dot={false}
+              connectNulls={false}
             />
       
           </LineChart>
