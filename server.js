@@ -121,7 +121,14 @@ async function scrapeTenup() {
   );
 
   await page.waitForTimeout(3000);
-
+  console.log("URL:", page.url());
+  
+  await page.screenshot({
+    path: "debug-tenup-error.png",
+    fullPage: true
+  });
+  
+  console.log(await page.content());
   // -------------------------
   // CHECK TABLE AVAILABILITY
   // -------------------------
