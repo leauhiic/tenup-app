@@ -43,35 +43,32 @@ async function loginFFT() {
 
   console.log("🔐 Login FFT SSO...");
 
-  await page.goto(LOGIN_URL, {
+  await page.goto("https://login.fft.fr/", {
     waitUntil: "domcontentloaded",
   });
 
-  // ⚠️ FFT peut changer les champs → stratégie robuste
-  await page.waitForTimeout(2000);
+  // 👉 attendre explicitement les bons champs
+  await page.waitForSelector('input[name="username"]', {
+    timeout: 15000,
+  });
 
-  // Try common selectors (FFT SSO varie)
-  const inputs = await page.locator("input").all();
+  await page.waitForSelector('input[name="password"]', {
+    timeout: 15000,
+  });
 
-  if (inputs.length < 2) {
-    throw new Error("Impossible de trouver les champs login FFT");
-  }
+  // 👉 remplissage propre
+  await page.fill('input[name="username"]', FFT_USER);
+  await page.fill('input[name="password"]', FFT_PASSWORD);
 
-  // Heuristique : 1er = user, 2e = pass
-  await inputs[0].fill(FFT_USER);
-  await inputs[1].fill(FFT_PASSWORD);
-
-  // submit button fallback
-  const buttons = await page.locator("button, input[type=submit]").all();
-
+  // 👉 bouton submit robuste
   await Promise.all([
     page.waitForNavigation({ waitUntil: "networkidle" }),
-    buttons[0].click(),
+    page.click('button[type="submit"], input[type="submit"]'),
   ]);
 
   console.log("✅ Login FFT OK");
 
-  // save session
+  // sauvegarde session
   await context.storageState({ path: STATE_PATH });
 
   await browser.close();
