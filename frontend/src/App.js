@@ -531,10 +531,21 @@ export default function App() {
     }
   };
 
-  const parseDate = s => {
+  const parseDate = (s) => {
     if (!s) return new Date(0);
-    const [j, m, a] = s.split("/");
-    return new Date(`${a}-${m}-${j}`);
+  
+    // ISO format
+    if (s.includes("-") && s.length >= 10) {
+      return new Date(s);
+    }
+  
+    // FR format
+    if (s.includes("/")) {
+      const [j, m, a] = s.split("/");
+      return new Date(`${a}-${m}-${j}`);
+    }
+  
+    return new Date(0);
   };
 
   const now = new Date();
@@ -847,34 +858,6 @@ export default function App() {
         </select>
         <button className={`btn-ghost ${!ordreAscendant ? "active" : ""}`} onClick={() => setOrdreAscendant(false)}>↓ Déc.</button>
         <button className={`btn-ghost ${ordreAscendant ? "active" : ""}`} onClick={() => setOrdreAscendant(true)}>↑ Asc.</button>
-      </div>
-
-      {/* Graphique évolution */}
-      <div className="section-header">
-        <div className="section-title">Progression</div>
-      </div>
-      
-      <div className="table-wrap">
-        <table className="data-table">
-          <thead>
-            <tr>
-              <th>Date</th>
-              <th>Tournoi</th>
-              <th>Points</th>
-              <th>Cumul</th>
-            </tr>
-          </thead>
-          <tbody>
-            {progression.map((p, i) => (
-              <tr key={i}>
-                <td className="dim">{p.date}</td>
-                <td>{p.nom}</td>
-                <td>{p.point}</td>
-                <td style={{ fontWeight: 700 }}>{p.cumul}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
       </div>
 
       {/* TABLEAU PRINCIPAL */}
