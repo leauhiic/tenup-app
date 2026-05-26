@@ -129,17 +129,17 @@ async function scrapeTenup() {
   // -------------------------
   // EXTRACTION DRUPAL STATE (IMPORTANT)
   // -------------------------
-  const data = await page.evaluate(() => {
-    const s = window.Drupal?.settings;
-
-    return {
-      joueur: s?.fft_fiche_joueur || null,
-      raw: s || null,
-    };
-  });
-
-  await browser.close();
-
+  const html = await page.content();
+  
+  const joueur = html
+    .match(/"fft_fiche_joueur"\s*:\s*({.*?})\s*,\s*"vuejs_context"/s);
+  
+  let data = null;
+  
+  if (joueur?.[1]) {
+    data = JSON.parse(joueur[1]);
+  }
+  
   return data;
 }
 
