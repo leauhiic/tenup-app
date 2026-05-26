@@ -6,6 +6,12 @@ const { chromium } = require("playwright");
 const TENUP_USER = "leau-hiic";
 const TENUP_PASSWORD = "31!Vosl!";
 
+const path = require("path");
+
+app.get("/debug-image", (req, res) => {
+  res.sendFile(path.join(__dirname, "debug.png"));
+});
+
 
 const app = express();
 app.use(cors());
