@@ -623,9 +623,14 @@ export default function App() {
   const moisLabel = now.toLocaleDateString("fr-FR", { month: "long" });
 
   const tournoisPerdus = tournoisExpirants;
-
-  
+  const pointsMoisCourant = tournoisMoisCourant.reduce(
+    (s, t) => s + (t.point || 0),
+    0
+  );
   const pointsPerdus = tournoisExpirants.reduce((s, t) => s + (t.point || 0), 0);
+  const deltaPoints = pointsMoisCourant - pointsPerdus;
+  
+  
 
   const tranchesDisponibles = TRANCHES[form.type] || [];
   const pointsPreview = form.type && form.tranche && form.classement
@@ -747,12 +752,20 @@ export default function App() {
           <div className="stat-label">Moy. Top 12</div>
           <div className="stat-value">{moyennePoints}</div>
         </div>
-        {pointsPerdus > 0 && (
-          <div className="stat-card" style={{ borderColor: "rgba(255,77,109,0.3)" }}>
-            <div className="stat-label" style={{ color: "var(--red)" }}>Perte ce mois</div>
-            <div className="stat-value" style={{ color: "var(--red)" }}>−{pointsPerdus}</div>
+        <div className="stat-card" style={{
+          borderColor: deltaPoints >= 0
+            ? "rgba(0,230,118,0.3)"
+            : "rgba(255,77,109,0.3)"
+        }}>
+          <div className="stat-label">
+            Impact mois {moisLabel}
           </div>
-        )}
+          <div className="stat-value" style={{
+            color: deltaPoints >= 0 ? "var(--accent)" : "var(--red)"
+          }}>
+            {deltaPoints >= 0 ? "+" : ""}{deltaPoints}
+          </div>
+        </div>
       </div>
 
       {/* FILTRES */}
