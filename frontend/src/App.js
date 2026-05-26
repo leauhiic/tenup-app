@@ -916,23 +916,13 @@ export default function App() {
       </div>
           
       {/* PROGRESSION TOP 12 */}
-      <LineChart data={progressionTop12}>
-        <XAxis dataKey="date" />
-        <YAxis />
-        <Tooltip />
-        <Line type="monotone" dataKey="top12" stroke="#00e676" strokeWidth={2} dot />
-      </LineChart>
-      <div className="section-header">
-        <div className="section-title">Courbe de progression</div>
-      </div>
-      
-      <div style={{ width: "100%", height: 300, background: "var(--surface)", padding: 16, borderRadius: 12 }}>
+      <div style={{ width: "100%", height: 300 }}>
         <ResponsiveContainer>
           <LineChart data={progressionTop12}>
             <XAxis dataKey="date" />
             <YAxis />
             <Tooltip />
-            <Line type="monotone" dataKey="cumul" stroke="#00e676" strokeWidth={2} />
+            <Line type="monotone" dataKey="top12" stroke="#00e676" strokeWidth={2} dot />
           </LineChart>
         </ResponsiveContainer>
       </div>
