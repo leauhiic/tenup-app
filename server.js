@@ -137,7 +137,99 @@ app.get("/debug-state", async (req, res) => {
     res.status(500).json({ error: e.message });
   }
 });
+// -------------------------
+// SCRAPE ENDPOINT
+// -------------------------
+app.get("/scrape-tenup", async (req, res) => {
+  try {
+    if (req.query.key !== SCRAPE_KEY) {
+      return res.status(403).send("❌ Forbidden");
+    }
 
+    const data = await scrapeTenup();
+
+    if (data?.error) {
+      return res.status(500).json(data);
+    }
+
+    if (!data?.joueur) {
+      return res.status(500).json({
+        error: "Aucune donnée trouvée",
+        debug: data,
+      });
+    }
+
+    const { joueur, tournois } = data;
+
+    // -------------------------
+    // INSERT DB
+    // -------------------------
+    for (const t of tournois) {
+      await db.query(
+        `
+        INSERT INTO tournois 
+        (date, nom, categorie, partenaire, classement, point, validite)
+        VALUES ($1,$2,$3,$4,$5,$6,$7)
+      `,
+        [
+          t.fin,
+          t.competition,
+          t.categorie || null,
+          t.partenaire,
+          t.classementEquipe,
+          t.points,
+          "OK",
+        ]
+      );
+    }
+
+    res.json({
+      success: true,
+      joueur: {
+        nom: joueur.nom,
+        prenom: joueur.prenom,
+        classement:
+          joueur?.fft_classement?.dernierClassement?.rang,
+      },
+      tournoisCount: tournois.length,
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// -------------------------
+// DEBUG ENDPOINT
+// -------------------------
+app.get("/debug-state", async (req, res) => {
+  try {
+    const browser = await chromium.launch({ headless: true });
+    const page = await browser.newPage();
+
+    await page.goto(
+      "https://tenup.fft.fr/classement/7146157482/padel",
+      { waitUntil: "networkidle" }
+    );
+
+    const state = await page.evaluate(() => {
+      return {
+        hasDrupal: !!window.Drupal,
+        hasDrupalSettings: !!window.drupalSettings,
+        joueur:
+          window.drupalSettings?.fft_fiche_joueur ||
+          window.Drupal?.settings?.fft_fiche_joueur ||
+          null,
+      };
+    });
+
+    await browser.close();
+
+    res.json(state);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
 // -------------------------
 // START
 // -------------------------
