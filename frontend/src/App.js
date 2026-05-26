@@ -536,46 +536,69 @@ export default function App() {
     return new Date(`${a}-${m}-${j}`);
   };
 
-  const unAn = new Date();
-  unAn.setFullYear(unAn.getFullYear() - 1);
-
-
   const now = new Date();
-   const nextMonth = new Date(now.getFullYear(), now.getMonth() + 1, 1);
-
- 
-  // début du mois courant
-  const startMonth = new Date(now.getFullYear(), now.getMonth(), 1);
   
-  // début du mois -12
-  const startWindow = new Date(now.getFullYear(), now.getMonth() - 11, 1);
-
-  const actifs = tournois.filter(t => {
+  // Mois courant
+  const currentMonth = now.getMonth();
+  const currentYear = now.getFullYear();
+  
+  // Début fenêtre FFT = M-11
+  const startWindow = new Date(currentYear, currentMonth - 11, 1);
+  
+  // 🔴 Expirés (avant fenêtre)
+  const expires = tournois.filter(t => {
     const d = parseDate(t.date);
-    return d >= startWindow;
+  
+    return (
+      d.getFullYear() < startWindow.getFullYear() ||
+      (d.getFullYear() === startWindow.getFullYear() &&
+       d.getMonth() < startWindow.getMonth())
+    );
   });
-const expires = tournois.filter(t => {
-  const d = parseDate(t.date);
-  return d < startWindow;
-});
-  const tournoisExpirants = tournois.filter(t => {
-  const d = parseDate(t.date);
-
-  return d.getMonth() === now.getMonth() &&
-         d.getFullYear() === now.getFullYear() - 1;
-});
-
+  
+  // 🟡 Mois courant
   const tournoisMoisCourant = tournois.filter(t => {
     const d = parseDate(t.date);
-    return d.getFullYear() === now.getFullYear() &&
-           d.getMonth() === now.getMonth();
+  
+    return (
+      d.getFullYear() === currentYear &&
+      d.getMonth() === currentMonth
+    );
   });
-
+  
+  // 🟢 Actifs (fenêtre FFT)
+  const actifs = tournois.filter(t => {
+    const d = parseDate(t.date);
+  
+    return (
+      (
+        d.getFullYear() > startWindow.getFullYear() ||
+        (d.getFullYear() === startWindow.getFullYear() &&
+         d.getMonth() >= startWindow.getMonth())
+      )
+    );
+  });
+  
+  // ✅ Classement actuel = actifs SANS mois courant
   const actifsClassement = actifs.filter(t => {
     const d = parseDate(t.date);
-    return !(d.getFullYear() === now.getFullYear() &&
-             d.getMonth() === now.getMonth());
+  
+    return !(
+      d.getFullYear() === currentYear &&
+      d.getMonth() === currentMonth
+    );
   });
+
+  // ⚠️ Expirent ce mois = même mois année précédente
+  const tournoisExpirants = tournois.filter(t => {
+    const d = parseDate(t.date);
+  
+    return (
+      d.getMonth() === currentMonth &&
+      d.getFullYear() === currentYear - 1
+    );
+  });
+
   const filtered = actifsClassement.filter(t =>
     (categorie === "all" || t.categorie === categorie) &&
     (t.nom?.toLowerCase().includes(search.toLowerCase()) ||
@@ -592,14 +615,13 @@ const expires = tournois.filter(t => {
   const meilleurs = [...sorted].sort((a, b) => b.point - a.point).slice(0, 12);
   const totalPoints = meilleurs.reduce((s, t) => s + (t.point || 0), 0);
   const moyennePoints = meilleurs.length > 0 ? Math.round(totalPoints / meilleurs.length) : 0;
-  const bestScore = Math.max(...sorted.map(t => t.point || 0), 0);
+  const bestScore = sorted.length > 0
+  ? Math.max(...sorted.map(t => t.point || 0))
+  : 0;
 
   const today = new Date();
   const moisLabel = now.toLocaleDateString("fr-FR", { month: "long" });
 
-  const moisSuivant = new Date(today.getFullYear(), today.getMonth())
-    .toLocaleDateString("fr-FR", { month: "short" }).toLowerCase()
-    + "-" + String(today.getFullYear()).slice(-2);
   const tournoisPerdus = tournoisExpirants;
 
   
