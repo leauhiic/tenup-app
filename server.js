@@ -2,7 +2,9 @@ require("dotenv").config();
 
 const express = require("express");
 const cors = require("cors");
-const { chromium } = require("playwright");
+const axios = require("axios");
+const tough = require("tough-cookie");
+const { wrapper } = require("axios-cookiejar-support");
 
 const app = express();
 app.use(cors());
@@ -14,6 +16,21 @@ const db = require("./db");
 const TENUP_USER = process.env.TENUP_USER;
 const TENUP_PASSWORD = process.env.TENUP_PASSWORD;
 const SCRAPE_KEY = process.env.SCRAPE_KEY;
+
+// -------------------------
+// HTTP CLIENT (SESSION)
+// -------------------------
+const jar = new tough.CookieJar();
+const client = wrapper(
+  axios.create({
+    jar,
+    withCredentials: true,
+    headers: {
+      "User-Agent":
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120 Safari/537.36",
+    },
+  })
+);
 
 // -------------------------
 // INIT DB
@@ -44,7 +61,170 @@ app.get("/init-db", async (req, res) => {
 // HEALTHCHECK
 // -------------------------
 app.get("/", (req, res) => {
-  res.send("🚀 TenUp API OK");
+  res.send("🚀 TenUp API (stable) OK");
+});
+
+// -------------------------
+// LOGIN TENUP (HTTP)
+// -------------------------
+async function loginTenup() {
+  try {
+    await client.post(
+      "https://tenup.fft.fr/user/login",
+      new URLSearchParams({
+        name: TENUP_USER,
+        pass: TENUP_PASSWORD,
+        form_id: "user_login_form",
+      }),
+      {
+        headers: {
+          "Content-Type":
+            "application/x-www-form-urlencoded",
+          Referer: "https://tenup.fft.fr/user/login",
+        },
+      }
+    );
+
+    console.log("✅ Login OK");
+  } catch (err) {
+    console.error("❌ Login failed:", err.message);
+  }
+}
+
+// -------------------------
+// FETCH PAGE HTML
+// -------------------------
+async function fetchClassementPage() {
+  const res = await client.get(
+    "https://tenup.fft.fr/classement/7146157482/padel"
+  );
+
+  return res.data;
+}
+
+// -------------------------
+// EXTRACTION ROBUSTE
+// -------------------------
+function extractData(html) {
+  // 1. joueur (regex safe)
+  const joueurMatch = html.match(
+    /fft_fiche_joueur\s*:\s*(\{[\s\S]*?\})/
+  );
+
+  let joueur = null;
+
+  if (joueurMatch) {
+    try {
+      joueur = eval("(" + joueurMatch[1] + ")");
+    } catch {}
+  }
+
+  // 2. fallback tournois (competition rows)
+  const tournoisMatch = html.match(
+    /"rows"\s*:\s*(\[[\s\S]*?\])/
+  );
+
+  let tournois = [];
+
+  if (tournoisMatch) {
+    try {
+      tournois = JSON.parse(tournoisMatch[1]);
+    } catch {}
+  }
+
+  return { joueur, tournois };
+}
+
+// -------------------------
+// CORE SCRAPER (API STYLE)
+// -------------------------
+async function scrapeTenup() {
+  await loginTenup();
+
+  const html = await fetchClassementPage();
+
+  const data = extractData(html);
+
+  return data;
+}
+
+// -------------------------
+// SCRAPE ENDPOINT
+// -------------------------
+app.get("/scrape-tenup", async (req, res) => {
+  try {
+    if (req.query.key !== SCRAPE_KEY) {
+      return res.status(403).send("❌ Forbidden");
+    }
+
+    const data = await scrapeTenup();
+
+    if (!data?.joueur) {
+      return res.status(500).json({
+        error: "Aucune donnée trouvée",
+        hint:
+          "TenUp HTML structure changed or login failed",
+      });
+    }
+
+    const { joueur, tournois } = data;
+
+    // -------------------------
+    // INSERT DB
+    // -------------------------
+    for (const t of tournois || []) {
+      await db.query(
+        `
+        INSERT INTO tournois 
+        (date, nom, categorie, partenaire, classement, point, validite)
+        VALUES ($1,$2,$3,$4,$5,$6,$7)
+      `,
+        [
+          t.fin || null,
+          t.competition || null,
+          t.categorie || null,
+          t.partenaire || null,
+          t.classementEquipe || null,
+          t.points || 0,
+          "OK",
+        ]
+      );
+    }
+
+    res.json({
+      success: true,
+      joueur: {
+        nom: joueur?.nom,
+        prenom: joueur?.prenom,
+        classement:
+          joueur?.fft_classement?.dernierClassement?.rang,
+        points:
+          joueur?.fft_classement?.dernierClassement?.points,
+      },
+      tournoisCount: tournois?.length || 0,
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// -------------------------
+// DEBUG ENDPOINT
+// -------------------------
+app.get("/debug", async (req, res) => {
+  try {
+    const html = await fetchClassementPage();
+
+    res.json({
+      htmlPreview: html.slice(0, 5000),
+      hasCompetition: html.includes("competition"),
+      hasRows: html.includes("rows"),
+      hasJoueur: html.includes("fft_fiche_joueur"),
+    });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
 });
 
 // -------------------------
@@ -61,175 +241,6 @@ app.get("/tournois", async (req, res) => {
   }
 });
 
-// -------------------------
-// SCRAPER CORE
-// -------------------------
-async function scrapeTenup() {
-  const browser = await chromium.launch({
-    headless: true,
-    args: ["--no-sandbox", "--disable-setuid-sandbox"],
-  });
-
-  const context = await browser.newContext();
-  const page = await context.newPage();
-
-  let apiCalls = [];
-
-  // 🔥 capture toutes les réponses JSON
-  page.on("response", async (response) => {
-    const url = response.url();
-
-    if (
-      url.includes("classement") ||
-      url.includes("padel") ||
-      url.includes("joueur") ||
-      url.includes("competition")
-    ) {
-      try {
-        const json = await response.json();
-        apiCalls.push({ url, json });
-      } catch (e) {}
-    }
-  });
-
-  const url =
-    "https://tenup.fft.fr/classement/7146157482/padel";
-
-  await page.goto(url, { waitUntil: "networkidle" });
-
-  await page.waitForTimeout(8000);
-
-  await browser.close();
-
-  return {
-    apiCalls,
-  };
-}
-
-// -------------------------
-// DEBUG ENDPOINT
-// -------------------------
-app.get("/debug-state", async (req, res) => {
-  try {
-    const browser = await chromium.launch({ headless: true });
-    const page = await browser.newPage();
-
-    await page.goto(
-      "https://tenup.fft.fr/classement/7146157482/padel",
-      { waitUntil: "networkidle" }
-    );
-
-    const state = await page.evaluate(() => {
-      return {
-        hasDrupal: !!window.Drupal,
-        hasDrupalSettings: !!window.drupalSettings,
-        joueur:
-          window.drupalSettings?.fft_fiche_joueur ||
-          window.Drupal?.settings?.fft_fiche_joueur ||
-          null,
-      };
-    });
-
-    await browser.close();
-
-    res.json(state);
-  } catch (e) {
-    res.status(500).json({ error: e.message });
-  }
-});
-// -------------------------
-// SCRAPE ENDPOINT
-// -------------------------
-app.get("/scrape-tenup", async (req, res) => {
-  try {
-    if (req.query.key !== SCRAPE_KEY) {
-      return res.status(403).send("❌ Forbidden");
-    }
-
-    const data = await scrapeTenup();
-
-    if (data?.error) {
-      return res.status(500).json(data);
-    }
-
-    if (!data?.joueur) {
-      return res.status(500).json({
-        error: "Aucune donnée trouvée",
-        debug: data,
-      });
-    }
-
-    const { joueur, tournois } = data;
-
-    // -------------------------
-    // INSERT DB
-    // -------------------------
-    for (const t of tournois) {
-      await db.query(
-        `
-        INSERT INTO tournois 
-        (date, nom, categorie, partenaire, classement, point, validite)
-        VALUES ($1,$2,$3,$4,$5,$6,$7)
-      `,
-        [
-          t.fin,
-          t.competition,
-          t.categorie || null,
-          t.partenaire,
-          t.classementEquipe,
-          t.points,
-          "OK",
-        ]
-      );
-    }
-
-    res.json({
-      success: true,
-      joueur: {
-        nom: joueur.nom,
-        prenom: joueur.prenom,
-        classement:
-          joueur?.fft_classement?.dernierClassement?.rang,
-      },
-      tournoisCount: tournois.length,
-    });
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: err.message });
-  }
-});
-
-// -------------------------
-// DEBUG ENDPOINT
-// -------------------------
-app.get("/debug-state", async (req, res) => {
-  try {
-    const browser = await chromium.launch({ headless: true });
-    const page = await browser.newPage();
-
-    await page.goto(
-      "https://tenup.fft.fr/classement/7146157482/padel",
-      { waitUntil: "networkidle" }
-    );
-
-    const state = await page.evaluate(() => {
-      return {
-        hasDrupal: !!window.Drupal,
-        hasDrupalSettings: !!window.drupalSettings,
-        joueur:
-          window.drupalSettings?.fft_fiche_joueur ||
-          window.Drupal?.settings?.fft_fiche_joueur ||
-          null,
-      };
-    });
-
-    await browser.close();
-
-    res.json(state);
-  } catch (e) {
-    res.status(500).json({ error: e.message });
-  }
-});
 // -------------------------
 // START
 // -------------------------
