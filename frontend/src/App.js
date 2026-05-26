@@ -695,8 +695,15 @@ export default function App() {
   }, [tournois]);
 
   const progressionTop12 = useMemo(() => {
+    if (!tournois || tournois.length === 0) return [];
+  
     const sorted = [...tournois]
-      .sort((a, b) => parseDate(a.date) - parseDate(b.date));
+      .map(t => ({
+        ...t,
+        dateObj: parseDate(t.date),
+        point: Number(t.point || 0)
+      }))
+      .sort((a, b) => a.dateObj - b.dateObj);
   
     let history = [];
   
@@ -707,7 +714,7 @@ export default function App() {
         .sort((a, b) => b.point - a.point)
         .slice(0, 12);
   
-      const sum = top12.reduce((s, t) => s + (t.point || 0), 0);
+      const sum = top12.reduce((s, t) => s + (Number(t.point) || 0), 0);
   
       history.push({
         date: sorted[i].date,
@@ -909,6 +916,12 @@ export default function App() {
       </div>
           
       {/* PROGRESSION TOP 12 */}
+      <LineChart data={progressionTop12}>
+        <XAxis dataKey="date" />
+        <YAxis />
+        <Tooltip />
+        <Line type="monotone" dataKey="top12" stroke="#00e676" strokeWidth={2} dot />
+      </LineChart>
       <div className="section-header">
         <div className="section-title">Courbe de progression</div>
       </div>
