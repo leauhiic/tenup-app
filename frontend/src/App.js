@@ -47,8 +47,8 @@ function getValidite(dateStr) {
     + "-" + String(future.getFullYear()).slice(-2);
 }
 
-function simulateTop12(tournois, monthsForward = 12) {
-  const base = [...tournois].map(t => ({
+function simulateFFTProjection(tournois, monthsForward = 12) {
+  const base = tournois.map(t => ({
     ...t,
     dateObj: new Date(t.date),
     point: Number(t.point || 0)
@@ -56,33 +56,38 @@ function simulateTop12(tournois, monthsForward = 12) {
 
   const results = [];
 
+  const now = new Date();
+
   for (let i = 0; i < monthsForward; i++) {
-    const refDate = new Date();
-    refDate.setMonth(refDate.getMonth() + i);
+    const refDate = new Date(now.getFullYear(), now.getMonth() + i, 1);
 
-    const windowStart = new Date(refDate);
-    windowStart.setMonth(windowStart.getMonth() - 12);
+    const windowStart = new Date(refDate.getFullYear(), refDate.getMonth() - 12, 1);
 
-    // fenêtre glissante
+    // 🔴 fenêtre glissante exacte
     const window = base.filter(t =>
       t.dateObj >= windowStart &&
-      t.dateObj <= refDate
+      t.dateObj < refDate
     );
 
+    // 🔴 TOP 12 réel FFT
     const top12 = [...window]
       .sort((a, b) => b.point - a.point)
       .slice(0, 12);
 
-    const sum = top12.reduce((s, t) => s + t.point, 0);
+    const sum = top12.reduce((acc, t) => acc + t.point, 0);
 
     results.push({
-      month: refDate.toLocaleDateString("fr-FR", { month: "short", year: "2-digit" }),
+      month: refDate.toLocaleDateString("fr-FR", {
+        month: "short",
+        year: "2-digit"
+      }),
       projected: sum
     });
   }
 
   return results;
 }
+
 const EMPTY_FORM = {
   date: "", nom: "", type: "P250", tranche: "17-20",
   categorie: "DM", partenaire: "", classement: "", point: "", validite: "",
@@ -792,17 +797,14 @@ export default function App() {
   const chartData = useMemo(() => {
     if (!tournois.length) return [];
   
-    // 1. réel (12 mois actuels)
     const real = progressionTop12.map(d => ({
       month: d.month,
       real: d.top12,
       projected: null
     }));
   
-    // 2. projection futur
-    const projected = simulateTop12(tournois, 12);
+    const projected = simulateFFTProjection(tournois, 12);
   
-    // 3. fusion
     return [...real, ...projected];
   }, [tournois, progressionTop12]);
   
