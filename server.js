@@ -3,90 +3,161 @@ require("dotenv").config();
 const express = require("express");
 const cors = require("cors");
 const { chromium } = require("playwright");
+const fs = require("fs");
 
 const app = express();
 app.use(cors());
 app.use(express.json());
 
 // -------------------------
-// HEALTHCHECK
+// ENV
+// -------------------------
+const FFT_USER = process.env.TENUP_USER;
+const FFT_PASSWORD = process.env.TENUP_PASSWORD;
+
+const STATE_PATH = "./storageState.json";
+
+const TENUP_URL =
+  "https://tenup.fft.fr/classement/7146157482/padel";
+
+const LOGIN_URL = "https://login.fft.fr/";
+
+// -------------------------
+// INIT
 // -------------------------
 app.get("/", (req, res) => {
-  res.send("🚀 TenUp HTML Debug OK");
+  res.send("🚀 FFT / TenUp scraper API OK");
 });
 
 // -------------------------
-// DEBUG FULL HTML PAGE
+// LOGIN FFT SSO
 // -------------------------
-app.get("/debug-html", async (req, res) => {
-  let browser;
+async function loginFFT() {
+  const browser = await chromium.launch({
+    headless: true,
+    args: ["--no-sandbox", "--disable-setuid-sandbox"],
+  });
 
+  const context = await browser.newContext();
+  const page = await context.newPage();
+
+  console.log("🔐 Login FFT SSO...");
+
+  await page.goto(LOGIN_URL, {
+    waitUntil: "domcontentloaded",
+  });
+
+  // ⚠️ FFT peut changer les champs → stratégie robuste
+  await page.waitForTimeout(2000);
+
+  // Try common selectors (FFT SSO varie)
+  const inputs = await page.locator("input").all();
+
+  if (inputs.length < 2) {
+    throw new Error("Impossible de trouver les champs login FFT");
+  }
+
+  // Heuristique : 1er = user, 2e = pass
+  await inputs[0].fill(FFT_USER);
+  await inputs[1].fill(FFT_PASSWORD);
+
+  // submit button fallback
+  const buttons = await page.locator("button, input[type=submit]").all();
+
+  await Promise.all([
+    page.waitForNavigation({ waitUntil: "networkidle" }),
+    buttons[0].click(),
+  ]);
+
+  console.log("✅ Login FFT OK");
+
+  // save session
+  await context.storageState({ path: STATE_PATH });
+
+  await browser.close();
+}
+
+// -------------------------
+// SCRAPE TENUP (AUTH SESSION)
+// -------------------------
+async function scrapeTenup() {
+  const browser = await chromium.launch({
+    headless: true,
+    args: ["--no-sandbox", "--disable-setuid-sandbox"],
+  });
+
+  const context = fs.existsSync(STATE_PATH)
+    ? await browser.newContext({ storageState: STATE_PATH })
+    : await browser.newContext();
+
+  const page = await context.newPage();
+
+  console.log("🌐 Navigation TenUp...");
+
+  await page.goto(TENUP_URL, {
+    waitUntil: "networkidle",
+  });
+
+  await page.waitForTimeout(4000);
+
+  const html = await page.content();
+
+  const debug = await page.evaluate(() => {
+    return {
+      url: window.location.href,
+      hasDrupal: !!window.Drupal,
+      hasSettings: !!window.Drupal?.settings,
+      title: document.title,
+      bodyPreview: document.body?.innerText?.slice(0, 300),
+    };
+  });
+
+  await browser.close();
+
+  return { html, debug };
+}
+
+// -------------------------
+// ROUTE LOGIN MANUEL
+// -------------------------
+app.get("/login", async (req, res) => {
   try {
-    browser = await chromium.launch({
-      headless: true,
-      args: ["--no-sandbox", "--disable-setuid-sandbox"],
-    });
+    await loginFFT();
+    res.json({ success: true, message: "FFT login session saved" });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: err.message });
+  }
+});
 
-    const context = await browser.newContext({
-      userAgent:
-        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/121 Safari/537.36",
-      locale: "fr-FR",
-    });
+// -------------------------
+// SCRAPE HTML COMPLET
+// -------------------------
+app.get("/scrape-html", async (req, res) => {
+  try {
+    const data = await scrapeTenup();
+    res.json(data);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: err.message });
+  }
+});
 
-    const page = await context.newPage();
-
-    const url =
-      "https://tenup.fft.fr/classement/7146157482/padel";
-
-    // 1. aller sur la page
-    await page.goto(url, {
-      waitUntil: "domcontentloaded",
-    });
-
-    // 2. laisser le JS finir de charger
-    await page.waitForTimeout(8000);
-
-    // -------------------------
-    // FULL HTML FINAL (DOM après JS)
-    // -------------------------
-    const html = await page.content();
-
-    // -------------------------
-    // BONUS DEBUG INFO
-    // -------------------------
-    const debug = await page.evaluate(() => {
-      return {
-        url: window.location.href,
-        hasDrupal: !!window.Drupal,
-        drupalKeys: window.Drupal
-          ? Object.keys(window.Drupal)
-          : [],
-        windowKeysSample: Object.keys(window).slice(0, 50),
-        bodyTextPreview: document.body.innerText.slice(
-          0,
-          2000
-        ),
-        scriptCount: document.scripts.length,
-      };
-    });
-
-    await browser.close();
-
-    // -------------------------
-    // RESPONSE CLEAN
-    // -------------------------
+// -------------------------
+// DEBUG
+// -------------------------
+app.get("/debug", async (req, res) => {
+  try {
+    const data = await scrapeTenup();
     res.json({
-      success: true,
-      debug,
-      html,
+      url: data.debug.url,
+      hasDrupal: data.debug.hasDrupal,
+      hasSettings: data.debug.hasSettings,
+      title: data.debug.title,
+      preview: data.debug.bodyPreview,
     });
   } catch (err) {
-    if (browser) await browser.close();
-
-    console.error(err);
-    res.status(500).json({
-      error: err.message,
-    });
+    res.status(500).json({ error: err.message });
   }
 });
 
@@ -94,7 +165,5 @@ app.get("/debug-html", async (req, res) => {
 // START
 // -------------------------
 app.listen(3000, () => {
-  console.log(
-    "🚀 Server running on http://localhost:3000"
-  );
+  console.log("🚀 Server running on http://localhost:3000");
 });
