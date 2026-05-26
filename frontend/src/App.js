@@ -1,6 +1,6 @@
-import { useEffect, useState } from "react";
-import BAREME from "./bareme.json";
 import { useEffect, useState, useMemo } from "react";
+import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts";
+import BAREME from "./bareme.json";
 
 const API = "https://tenup-app-production.up.railway.app";
 
@@ -682,7 +682,30 @@ export default function App() {
       };
     });
   }, [tournois]);
+
+  const progressionTop12 = useMemo(() => {
+    const sorted = [...tournois]
+      .sort((a, b) => parseDate(a.date) - parseDate(b.date));
   
+    let history = [];
+  
+    for (let i = 0; i < sorted.length; i++) {
+      const slice = sorted.slice(0, i + 1);
+  
+      const top12 = [...slice]
+        .sort((a, b) => b.point - a.point)
+        .slice(0, 12);
+  
+      const sum = top12.reduce((s, t) => s + (t.point || 0), 0);
+  
+      history.push({
+        date: sorted[i].date,
+        top12: sum
+      });
+    }
+  
+    return history;
+  }, [tournois]);
   return (
     <div className="tenup-app">
 
@@ -826,6 +849,34 @@ export default function App() {
         <button className={`btn-ghost ${ordreAscendant ? "active" : ""}`} onClick={() => setOrdreAscendant(true)}>↑ Asc.</button>
       </div>
 
+      {/* Graphique évolution */}
+      <div className="section-header">
+        <div className="section-title">Progression</div>
+      </div>
+      
+      <div className="table-wrap">
+        <table className="data-table">
+          <thead>
+            <tr>
+              <th>Date</th>
+              <th>Tournoi</th>
+              <th>Points</th>
+              <th>Cumul</th>
+            </tr>
+          </thead>
+          <tbody>
+            {progression.map((p, i) => (
+              <tr key={i}>
+                <td className="dim">{p.date}</td>
+                <td>{p.nom}</td>
+                <td>{p.point}</td>
+                <td style={{ fontWeight: 700 }}>{p.cumul}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
       {/* TABLEAU PRINCIPAL */}
       <div className="section-header">
         <div className="section-title">Tournois en cours de validité</div>
@@ -871,33 +922,22 @@ export default function App() {
         )}
       </div>
           
-      {/* Graphique évolution */}
+      {/* PROGRESSION TOP 12 */}
       <div className="section-header">
-        <div className="section-title">Progression</div>
+        <div className="section-title">Courbe de progression</div>
       </div>
       
-      <div className="table-wrap">
-        <table className="data-table">
-          <thead>
-            <tr>
-              <th>Date</th>
-              <th>Tournoi</th>
-              <th>Points</th>
-              <th>Cumul</th>
-            </tr>
-          </thead>
-          <tbody>
-            {progression.map((p, i) => (
-              <tr key={i}>
-                <td className="dim">{p.date}</td>
-                <td>{p.nom}</td>
-                <td>{p.point}</td>
-                <td style={{ fontWeight: 700 }}>{p.cumul}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+      <div style={{ width: "100%", height: 300, background: "var(--surface)", padding: 16, borderRadius: 12 }}>
+        <ResponsiveContainer>
+          <LineChart data={progressionTop12}>
+            <XAxis dataKey="date" />
+            <YAxis />
+            <Tooltip />
+            <Line type="monotone" dataKey="cumul" stroke="#00e676" strokeWidth={2} />
+          </LineChart>
+        </ResponsiveContainer>
       </div>
+
       {/* ALERTE TOURNOIS PERDUS */}
       {tournoisPerdus.length > 0 && (
         <>
