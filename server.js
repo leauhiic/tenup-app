@@ -41,34 +41,41 @@ async function loginFFT() {
   const context = await browser.newContext();
   const page = await context.newPage();
 
-  console.log("🔐 Login FFT SSO...");
+  console.log("🔐 Opening Keycloak FFT...");
 
   await page.goto("https://login.fft.fr/", {
-    waitUntil: "domcontentloaded",
+    waitUntil: "networkidle",
   });
 
-  // 👉 attendre explicitement les bons champs
-  await page.waitForSelector('input[name="username"]', {
-    timeout: 15000,
-  });
+  // 🔥 ATTEND N'IMPORTE QUEL INPUT (Keycloak lazy render)
+  await page.waitForTimeout(5000);
 
-  await page.waitForSelector('input[name="password"]', {
-    timeout: 15000,
-  });
+  // DEBUG utile si ça recasse
+  console.log("URL after redirect:", page.url());
 
-  // 👉 remplissage propre
-  await page.fill('input[name="username"]', FFT_USER);
-  await page.fill('input[name="password"]', FFT_PASSWORD);
+  // 🎯 Keycloak peut utiliser différents names selon version
+  const username = page.locator(
+    'input[name="username"], input#username, input[type="text"]'
+  );
 
-  // 👉 bouton submit robuste
+  const password = page.locator(
+    'input[name="password"], input#password, input[type="password"]'
+  );
+
+  await username.first().fill(FFT_USER);
+  await password.first().fill(FFT_PASSWORD);
+
+  const submit = page.locator(
+    'button[type="submit"], input[type="submit"]'
+  );
+
   await Promise.all([
     page.waitForNavigation({ waitUntil: "networkidle" }),
-    page.click('button[type="submit"], input[type="submit"]'),
+    submit.first().click(),
   ]);
 
-  console.log("✅ Login FFT OK");
+  console.log("✅ FFT login completed");
 
-  // sauvegarde session
   await context.storageState({ path: STATE_PATH });
 
   await browser.close();
