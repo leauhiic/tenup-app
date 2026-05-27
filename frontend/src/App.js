@@ -96,6 +96,21 @@ function simulateFFTProjection(tournois, monthsList) {
   });
 }
 
+function computeTop12(tournois, refDate) {
+  const windowEnd = endOfMonth(refDate);
+  const windowStart = startOfMonth(addMonths(windowEnd, -11));
+
+  const pool = tournois.filter(t =>
+    t.dateObj >= windowStart &&
+    t.dateObj <= windowEnd
+  );
+
+  return pool
+    .sort((a, b) => b.point - a.point)
+    .slice(0, 12)
+    .reduce((s, t) => s + t.point, 0);
+}
+
 const EMPTY_FORM = {
   date: "", nom: "", type: "P250", tranche: "17-20",
   categorie: "DM", partenaire: "", classement: "", point: "", validite: "",
@@ -735,6 +750,17 @@ export default function App() {
   // ─────────────────────────────────────────────
   // 12 MOIS GLISSANTS
   // ─────────────────────────────────────────────
+  const endReal = startOfMonth(new Date()); // mai 2026
+  const startReal = addMonths(endReal, -11);
+
+  const monthsReal = Array.from({ length: 12 }, (_, i) =>
+    addMonths(startReal, i)
+  );
+
+  const monthsProjected = monthsReal.map(d =>
+    addMonths(d, 12)
+  );
+  
   const months = useMemo(() => {
     const start = startOfMonth(addMonths(now, -11)); 
     // ou startOfMonth(new Date(2025, 4, 1)) si tu veux figé
@@ -789,13 +815,24 @@ export default function App() {
   
   const projectedData = simulateFFTProjection(tournois, months);
   
-  const chartData = useMemo(() => {
-    return months.map((m, i) => ({
-      month: m.label,
-      real: progressionTop12[i]?.top12 ?? null,
-      projected: projectedData[i]?.projected ?? null
+ const chartData = useMemo(() => {
+    const normalized = tournois.map(t => ({
+      ...t,
+      dateObj: parseDate(t.date),
+      point: Number(t.point || 0)
     }));
-  }, [months, progressionTop12, tournois]);
+  
+    return monthsReal.map((m, i) => {
+      const real = computeTop12(normalized, m);
+      const projected = computeTop12(normalized, monthsProjected[i]);
+  
+      return {
+        month: monthKey(m),
+        real,
+        projected
+      };
+    });
+  }, [tournois]);
   
   console.log("TOURNOIS:", tournois);
   console.log("PROGRESSION:", progressionTop12);
