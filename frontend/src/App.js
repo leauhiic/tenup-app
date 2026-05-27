@@ -785,7 +785,7 @@ export default function App() {
     return months.map(m => {
   
       // fin du mois courant (correct)
-      const endMonth = endOfMonth(m.date);
+      const endMonth = endOfMonth(subMonths(m.date, 1));
   
       // fenêtre 12 mois glissants
       const windowStart = startOfMonth(subMonths(endMonth, 11));
