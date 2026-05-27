@@ -766,7 +766,7 @@ export default function App() {
       point: Number(t.point || 0)
     }));
   
-    return months.map((m) => {
+    return months.map((m, index) => {
   
       const endMonth = new Date(
         m.date.getFullYear(),
@@ -793,9 +793,9 @@ export default function App() {
       const sum = top12.reduce((s,t) => s + t.point, 0);
   
       return {
-        month: m.label,
+        month: months[index + 1]?.label || m.label,
         top12: sum,
-        isFuture: m.date > startOfMonth(now)
+        isFuture: m.date >= startOfMonth(now)
       };
     });
   
