@@ -837,7 +837,7 @@ export default function App() {
       const total = top12.reduce((s, t) => s + t.point, 0);
   
       const isPastOrCurrent = m.date <= now;
-      const isPastOrCurrent2 = m.date >= now;
+      const isPastOrCurrent2 = m.date >= subMonths(now,1);
   
       return {
         month: m.label,
