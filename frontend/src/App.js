@@ -1,6 +1,6 @@
 import { useEffect, useState, useMemo } from "react";
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts";
-import { addMonths, startOfMonth, endOfMonth, subMonths } from "date-fns";
+import { addMonths, startOfMonth, endOfMonth, subMonths, format } from "date-fns";
 
 import BAREME from "./bareme.json";
 
