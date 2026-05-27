@@ -823,11 +823,9 @@ export default function App() {
       })
       .slice(0, 12);
   };
-  const buildChartData = (months, normalized, now) => {
-    let lastReal = null;
-    let firstProjectedSet = false;
   
-    const data = months.map((m) => {
+  const buildChartData = (months, normalized, now) => {
+    return months.map((m) => {
       const { start, end } = getWindow(m.date);
   
       const pool = normalized.filter((t) => {
@@ -839,34 +837,16 @@ export default function App() {
       const total = top12.reduce((s, t) => s + t.point, 0);
   
       const isPastOrCurrent = m.date <= now;
-  
-      // Real
-      if (isPastOrCurrent) {
-        lastReal = total;
-      }
-  
-      // Projected
-      let projected = null;
-  
-      if (!isPastOrCurrent) {
-        if (!firstProjectedSet) {
-          projected = lastReal; // <- raccord avec le dernier real
-          firstProjectedSet = true;
-        } else {
-          projected = total;
-        }
-      }
+      const isPastOrCurrent2 = m.date >= now;
   
       return {
         month: m.label,
         real: isPastOrCurrent ? total : null,
-        projected,
+        projected: isPastOrCurrent2 ? total : null,
       };
     });
-  
-    return data;
   };
-
+  
   const chartData = useMemo(() => {
     if (!months.length || !normalized.length) return [];
   
