@@ -824,8 +824,8 @@ export default function App() {
       .slice(0, 12);
   };
   const buildChartData = (months, normalized, now = new Date()) => {
-    return months.map((month) => {
-      const { start, end } = getWindow(month);
+    return months.map((m) => {
+      const { start, end } = getWindow(m.date); // 👈 IMPORTANT
   
       const pool = normalized.filter((t) => {
         const d = t.dateObj;
@@ -833,13 +833,12 @@ export default function App() {
       });
   
       const top12 = getTop12(pool);
-  
       const total = top12.reduce((sum, t) => sum + t.point, 0);
   
-      const label = format(month, "MMM yyyy");
+      const label = format(m.date, "MMM yyyy"); // 👈 FIX
   
       const isPastOrCurrent =
-        startOfMonth(month) <= startOfMonth(now);
+        startOfMonth(m.date) <= startOfMonth(now);
   
       return {
         month: label,
