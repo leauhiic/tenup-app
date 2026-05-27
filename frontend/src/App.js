@@ -778,7 +778,7 @@ export default function App() {
       point: Number(t.point || 0)
     }));
   
-    return months.map((m) => {
+    return months.map((m, index) => {
   
       // fin du mois affiché
       const endMonth = new Date(
@@ -804,7 +804,7 @@ export default function App() {
         .slice(0, 12);
   
       return {
-        month: m.label,
+        month: months[index + 1]?.label || m.label,
         top12: top12.reduce((s, t) => s + t.point, 0),
         isFuture: false
       };
