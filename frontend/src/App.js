@@ -817,9 +817,11 @@ export default function App() {
       projected: null
     }));
   
-    const future = projected.map(d => ({
+    const lastReal = real.at(-1);
+  
+    const future = projected.map((d, i) => ({
       month: d.month,
-      real: null,
+      real: i === 0 ? lastReal?.real ?? null : null,
       projected: d.projected ?? 0
     }));
   
