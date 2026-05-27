@@ -48,39 +48,50 @@ function getValidite(dateStr) {
 }
 
 function simulateFFTProjection(tournois, monthsForward = 12) {
+
   const base = tournois.map(t => ({
     ...t,
-    dateObj: new Date(t.date),
+    dateObj: parseDate(t.date),
     point: Number(t.point || 0)
   }));
 
   const results = [];
 
-  const now = new Date();
+  const now = startOfMonth(new Date());
 
-  for (let i = 0; i < monthsForward; i++) {
-    const refDate = new Date(now.getFullYear(), now.getMonth() + i, 1);
+  for (let i = 1; i <= monthsForward; i++) {
 
-    const windowStart = new Date(refDate.getFullYear(), refDate.getMonth() - 12, 1);
+    // mois projeté
+    const refDate = addMonths(now, i);
 
-    // 🔴 fenêtre glissante exacte
-    const window = base.filter(t =>
-      t.dateObj >= windowStart &&
-      t.dateObj < refDate
+    // fenêtre FFT glissante
+    const windowStart = new Date(
+      refDate.getFullYear(),
+      refDate.getMonth() - 11,
+      1
     );
 
-    // 🔴 TOP 12 réel FFT
-    const top12 = [...window]
+    const windowEnd = new Date(
+      refDate.getFullYear(),
+      refDate.getMonth() + 1,
+      0
+    );
+
+    // uniquement les tournois encore valides
+    const validTournois = base.filter(t =>
+      t.dateObj >= windowStart &&
+      t.dateObj <= windowEnd
+    );
+
+    // vrai top12 FFT
+    const top12 = [...validTournois]
       .sort((a, b) => b.point - a.point)
       .slice(0, 12);
 
     const sum = top12.reduce((acc, t) => acc + t.point, 0);
 
     results.push({
-      month: refDate.toLocaleDateString("fr-FR", {
-        month: "short",
-        year: "2-digit"
-      }),
+      month: monthKey(refDate),
       projected: sum
     });
   }
@@ -746,7 +757,7 @@ export default function App() {
   // ─────────────────────────────────────────────
   const months = useMemo(() => {
     return Array.from({ length: 13 }, (_, i) => {
-      const d = addMonths(startOfMonth(now), i - 12);
+      const d = addMonths(startOfMonth(now), i - 11);
       return {
         label: monthKey(d),
         date: d
@@ -766,15 +777,16 @@ export default function App() {
       point: Number(t.point || 0)
     }));
   
-    return months.map((m, index) => {
+    return months.map((m) => {
   
+      // fin du mois affiché
       const endMonth = new Date(
         m.date.getFullYear(),
         m.date.getMonth() + 1,
         0
       );
   
-      // ✅ vraie fenêtre FFT glissante
+      // fenêtre FFT glissante exacte
       const windowStart = new Date(
         endMonth.getFullYear(),
         endMonth.getMonth() - 11,
@@ -787,29 +799,21 @@ export default function App() {
       );
   
       const top12 = [...pool]
-        .sort((a,b) => b.point - a.point)
+        .sort((a, b) => b.point - a.point)
         .slice(0, 12);
   
-      const sum = top12.reduce((s,t) => s + t.point, 0);
-  
       return {
-        month: months[index + 1]?.label || m.label,
-        top12: sum,
-        isFuture: m.date >= startOfMonth(now)
+        month: m.label,
+        top12: top12.reduce((s, t) => s + t.point, 0),
+        isFuture: false
       };
     });
   
   }, [tournois, months]);
-  
-  const realData = progressionTop12.filter(p => !p.isFuture);
-  const projectedData = progressionTop12;
-  
-  const cleanData = Array.from(
-    new Map(progressionTop12.map(x => [x.month, x])).values()
-  );
 
   const chartData = useMemo(() => {
-    if (!tournois.length) return [];
+  
+    const projected = simulateFFTProjection(tournois, 12);
   
     const real = progressionTop12.map(d => ({
       month: d.month,
@@ -817,9 +821,14 @@ export default function App() {
       projected: null
     }));
   
-    const projected = simulateFFTProjection(tournois, 12);
+    const future = projected.map(d => ({
+      month: d.month,
+      real: null,
+      projected: d.projected
+    }));
   
-    return [...real, ...projected];
+    return [...real, ...future];
+  
   }, [tournois, progressionTop12]);
   
   console.log("TOURNOIS:", tournois);
