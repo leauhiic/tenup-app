@@ -763,7 +763,13 @@ export default function App() {
       };
     });
   }, [now]);
-  
+  const normalized = useMemo(() => {
+    return tournois.map(t => ({
+      ...t,
+      dateObj: parseDate(t.date),
+      point: Number(t.point || 0)
+    }));
+  }, [tournois]);
   // ─────────────────────────────────────────────
   // TOP 12 PAR MOIS
   // ─────────────────────────────────────────────
@@ -842,6 +848,13 @@ export default function App() {
       };
     });
   };
+
+  const chartData = useMemo(() => {
+    if (!months.length || !normalized.length) return [];
+  
+    return buildChartData(months, normalized, now);
+  }, [months, normalized, now]);
+  
   console.log("TOURNOIS:", tournois);
   console.log("PROGRESSION:", progressionTop12);
   return (
