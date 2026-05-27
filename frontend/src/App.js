@@ -759,32 +759,46 @@ export default function App() {
   // ─────────────────────────────────────────────
   const progressionTop12 = useMemo(() => {
     if (!tournois.length) return [];
-
+  
     const normalized = tournois.map(t => ({
       ...t,
       dateObj: parseDate(t.date),
       point: Number(t.point || 0)
     }));
-
-    return months.map((m, idx) => {
-      const endMonth = new Date(m.date.getFullYear(), m.date.getMonth() + 1, 0);
-
+  
+    return months.map((m) => {
+  
+      const endMonth = new Date(
+        m.date.getFullYear(),
+        m.date.getMonth() + 1,
+        0
+      );
+  
+      // ✅ vraie fenêtre FFT glissante
+      const windowStart = new Date(
+        endMonth.getFullYear(),
+        endMonth.getMonth() - 11,
+        1
+      );
+  
       const pool = normalized.filter(t =>
+        t.dateObj >= windowStart &&
         t.dateObj <= endMonth
       );
-
+  
       const top12 = [...pool]
         .sort((a,b) => b.point - a.point)
         .slice(0, 12);
-
+  
       const sum = top12.reduce((s,t) => s + t.point, 0);
-
+  
       return {
         month: m.label,
         top12: sum,
         isFuture: m.date > startOfMonth(now)
       };
     });
+  
   }, [tournois, months]);
   
   const realData = progressionTop12.filter(p => !p.isFuture);
