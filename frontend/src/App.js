@@ -757,8 +757,8 @@ export default function App() {
   // 13 MOIS GLISSANTS (5 mois avant à +7 mois)
   // ─────────────────────────────────────────────
   const months = useMemo(() => {
-    return Array.from({ length: 13 }, (_, i) => {
-      const d = addMonths(startOfMonth(now), i - 11);
+    return Array.from({ length: 12 }, (_, i) => {
+      const d = addMonths(startOfMonth(now)-1, i - 11);
       return {
         label: monthKey(d),
         date: d
