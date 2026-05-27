@@ -758,7 +758,7 @@ export default function App() {
   // ─────────────────────────────────────────────
   const months = useMemo(() => {
     return Array.from({ length: 12 }, (_, i) => {
-      const d = addMonths(startOfMonth(now)-1, i - 11);
+      const d = addMonths(startOfMonth(now)-1, i - 10);
       return {
         label: monthKey(d),
         date: d
