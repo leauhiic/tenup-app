@@ -1,6 +1,6 @@
 import { useEffect, useState, useMemo } from "react";
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts";
-import { addMonths, startOfMonth, format } from "date-fns";
+import { addMonths, startOfMonth, endOfMonth, subMonths } from "date-fns";
 
 import BAREME from "./bareme.json";
 
@@ -809,32 +809,21 @@ export default function App() {
   }, [tournois, months]);
 
   const chartData = useMemo(() => {
-
-    const projected = simulateFFTProjection(tournois, 12);
+    const projected = simulateFFTProjection(tournois, 12) || [];
   
-    // réel jusqu’au mois courant uniquement
     const real = progressionTop12.map(d => ({
       month: d.month,
-      real: d.top12,
+      real: d.top12 ?? 0,
       projected: null
     }));
   
-    // point de raccord
-    const bridge = {
-      month: projected[0]?.month,
-      real: progressionTop12.at(-1)?.top12 || null,
-      projected: projected[0]?.projected || null
-    };
-  
-    // projection future
     const future = projected.map(d => ({
       month: d.month,
       real: null,
-      projected: d.projected
+      projected: d.projected ?? 0
     }));
   
-    return [...real, bridge, ...future];
-  
+    return [...real, ...future];
   }, [tournois, progressionTop12]);
   
   console.log("TOURNOIS:", tournois);
