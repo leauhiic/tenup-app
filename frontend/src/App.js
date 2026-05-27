@@ -754,10 +754,10 @@ export default function App() {
   }, [tournois]);
 
   // ─────────────────────────────────────────────
-  // 13 MOIS GLISSANTS (5 mois avant à +7 mois)
+  // 12 MOIS GLISSANTS
   // ─────────────────────────────────────────────
   const months = useMemo(() => {
-    const start = startOfMonth(addMonths(now, -12)); 
+    const start = startOfMonth(addMonths(now, -11)); 
     // ou startOfMonth(new Date(2025, 4, 1)) si tu veux figé
   
     return Array.from({ length: 12 }, (_, i) => {
@@ -787,14 +787,14 @@ export default function App() {
       // fin du mois affiché
       const endMonth = new Date(
         m.date.getFullYear(),
-        m.date.getMonth() + 1,
+        m.date.getMonth(),
         0
       );
   
       // fenêtre FFT glissante exacte
       const windowStart = new Date(
         endMonth.getFullYear(),
-        endMonth.getMonth() - 11,
+        endMonth.getMonth() - 12,
         1
       );
   
