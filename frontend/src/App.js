@@ -821,13 +821,11 @@ export default function App() {
     const projected = simulateFFTProjection(tournois, 12);
   
     // réel jusqu’au mois courant uniquement
-    const real = progressionTop12
-      .filter(d => d.month !== projected[0]?.month)
-      .map(d => ({
-        month: d.month,
-        real: d.top12,
-        projected: null
-      }));
+    const real = progressionTop12.map(d => ({
+      month: d.month,
+      real: d.top12,
+      projected: null
+    }));
   
     // point de raccord
     const bridge = {
