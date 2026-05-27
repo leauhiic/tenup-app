@@ -80,18 +80,18 @@ function simulateFFTProjection(tournois, monthsForward = 12) {
   for (let i = 1; i <= monthsForward; i++) {
 
     // mois projeté
-    const refDate = addMonths(now, i);
+    const refDate = addMonths(now, i+1);
 
     // fenêtre FFT glissante
     const windowStart = new Date(
       refDate.getFullYear(),
-      refDate.getMonth() - 11,
+      refDate.getMonth() - 12,
       1
     );
 
     const windowEnd = new Date(
       refDate.getFullYear(),
-      refDate.getMonth() + 1,
+      refDate.getMonth(),
       0
     );
 
