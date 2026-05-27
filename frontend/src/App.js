@@ -804,49 +804,54 @@ export default function App() {
   
   const projectedData = simulateFFTProjection(tournois, months);
   
-  const chartData = useMemo(() => {
+const chartData = useMemo(() => {
     const normalized = tournois.map(t => ({
-      ...t,
-      dateObj: parseDate(t.date),
+      date: parseDate(t.date).getTime(),
       point: Number(t.point || 0)
     }));
+  
+    const sorted = normalized.sort((a, b) => a.date - b.date);
   
     const realEnd = endOfMonth(new Date());
     const realStart = startOfMonth(addMonths(realEnd, -11));
   
-    const projectedEnd = endOfMonth(addMonths(realEnd, 12));
-    const projectedStart = startOfMonth(addMonths(realStart, 12));
-  
-    const monthsReal = Array.from({ length: 12 }, (_, i) =>
+    const months = Array.from({ length: 12 }, (_, i) =>
       addMonths(realStart, i)
     );
   
-    const monthsProjected = Array.from({ length: 12 }, (_, i) =>
-      addMonths(projectedStart, i)
-    );
+    const computeRollingTop12 = (endDate) => {
+      const end = endOfMonth(endDate).getTime();
+      const start = startOfMonth(addMonths(endDate, -11)).getTime();
   
-    const build = (months) =>
-      months.map(m => {
-        const end = endOfMonth(m);
-        const start = startOfMonth(addMonths(end, -11));
+      const pool = [];
   
-        const pool = normalized.filter(t =>
-          t.dateObj >= start &&
-          t.dateObj <= end
-        );
+      for (let i = 0; i < sorted.length; i++) {
+        const t = sorted[i];
+        if (t.date > end) break;
+        if (t.date >= start) pool.push(t);
+      }
   
-        const top12 = pool
-          .sort((a, b) => b.point - a.point)
-          .slice(0, 12);
+      // top12 sans sort global si petit pool
+      const top = pool
+        .sort((a, b) => b.point - a.point)
+        .slice(0, 12);
   
-        return top12.reduce((s, t) => s + t.point, 0);
-      });
+      return top.reduce((sum, t) => sum + t.point, 0);
+    };
   
-    return monthsReal.map((m, i) => ({
-      month: monthKey(m),
-      real: build([m])[0],
-      projected: build([monthsProjected[i]])[0]
-    }));
+    return months.map((m) => {
+      const real = computeRollingTop12(m);
+  
+      // projection = même logique mais décalée dans le futur
+      const projectedDate = addMonths(m, 12);
+      const projected = computeRollingTop12(projectedDate);
+  
+      return {
+        month: monthKey(m),
+        real,
+        projected
+      };
+    });
   }, [tournois]);
   
   console.log("TOURNOIS:", tournois);
