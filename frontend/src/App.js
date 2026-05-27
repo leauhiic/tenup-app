@@ -65,7 +65,7 @@ function parseDate(s) {
   return new Date(0);
 }
 
-function simulateFFTProjection(tournois, monthsForward = 12) {
+function simulateFFTProjection(tournois, monthsList) {
 
   const base = tournois.map(t => ({
     ...t,
@@ -73,48 +73,27 @@ function simulateFFTProjection(tournois, monthsForward = 12) {
     point: Number(t.point || 0)
   }));
 
-  const results = [];
+  return monthsList.map(m => {
 
-  const now = startOfMonth(new Date());
+    const refDate = m.date;
 
-  for (let i = 1; i <= monthsForward; i++) {
+    const windowEnd = endOfMonth(refDate);
+    const windowStart = startOfMonth(subMonths(windowEnd, 11));
 
-    // mois projeté
-    const refDate = addMonths(now, i);
-
-    // fenêtre FFT glissante
-    const windowStart = new Date(
-      refDate.getFullYear(),
-      refDate.getMonth() - 12,
-      1
-    );
-
-    const windowEnd = new Date(
-      refDate.getFullYear(),
-      refDate.getMonth(),
-      0
-    );
-
-    // uniquement les tournois encore valides
-    const validTournois = base.filter(t =>
+    const pool = base.filter(t =>
       t.dateObj >= windowStart &&
       t.dateObj <= windowEnd
     );
 
-    // vrai top12 FFT
-    const top12 = [...validTournois]
+    const top12 = pool
       .sort((a, b) => b.point - a.point)
       .slice(0, 12);
 
-    const sum = top12.reduce((acc, t) => acc + t.point, 0);
-
-    results.push({
-      month: monthKey(refDate),
-      projected: sum
-    });
-  }
-
-  return results;
+    return {
+      month: m.label,
+      projected: top12.reduce((s, t) => s + t.point, 0)
+    };
+  });
 }
 
 const EMPTY_FORM = {
@@ -807,27 +786,16 @@ export default function App() {
     });
   
   }, [tournois, months]);
-
-
-  const realMap = new Map(
-    progressionTop12.map(d => [d.month, d.top12])
-  );
   
-  const projectedMap = new Map(
-    simulateFFTProjection(tournois, 12).map(d => [d.month, d.projected])
-  );
+  const projectedData = simulateFFTProjection(tournois, months);
   
   const chartData = useMemo(() => {
-    return months.map(m => {
-      const key = m.label;
-  
-      return {
-        month: key,
-        real: realMap.get(key) ?? null,
-        projected: projectedMap.get(key) ?? null
-      };
-    });
-  }, [months, tournois, progressionTop12]);
+    return months.map((m, i) => ({
+      month: m.label,
+      real: progressionTop12[i]?.top12 ?? null,
+      projected: projectedData[i]?.projected ?? null
+    }));
+  }, [months, progressionTop12, tournois]);
   
   console.log("TOURNOIS:", tournois);
   console.log("PROGRESSION:", progressionTop12);
