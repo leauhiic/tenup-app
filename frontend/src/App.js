@@ -803,57 +803,45 @@ export default function App() {
   }, [tournois, months]);
   
   const projectedData = simulateFFTProjection(tournois, months);
+  const getWindow = (month) => ({
+    start: startOfMonth(addMonths(month, -12)),
+    end: endOfMonth(addMonths(month, -1)),
+  });
+
+  const getTop12 = (tournaments) => {
+    return [...tournaments] // 👈 clone obligatoire
+      .sort((a, b) => {
+        // tri stable : points + date en tie-breaker
+        if (b.point !== a.point) return b.point - a.point;
+        return new Date(b.dateObj) - new Date(a.dateObj);
+      })
+      .slice(0, 12);
+  };
+  const buildChartData = (months, normalized, now = new Date()) => {
+    return months.map((month) => {
+      const { start, end } = getWindow(month);
   
-const chartData = useMemo(() => {
-    const normalized = tournois.map(t => ({
-      date: parseDate(t.date).getTime(),
-      point: Number(t.point || 0)
-    }));
+      const pool = normalized.filter((t) => {
+        const d = t.dateObj;
+        return d >= start && d <= end;
+      });
   
-    const sorted = normalized.sort((a, b) => a.date - b.date);
+      const top12 = getTop12(pool);
   
-    const realEnd = endOfMonth(new Date());
-    const realStart = startOfMonth(addMonths(realEnd, -11));
+      const total = top12.reduce((sum, t) => sum + t.point, 0);
   
-    const months = Array.from({ length: 12 }, (_, i) =>
-      addMonths(realStart, i)
-    );
+      const label = format(month, "MMM yyyy");
   
-    const computeRollingTop12 = (endDate) => {
-      const end = endOfMonth(endDate).getTime();
-      const start = startOfMonth(addMonths(endDate, -11)).getTime();
-  
-      const pool = [];
-  
-      for (let i = 0; i < sorted.length; i++) {
-        const t = sorted[i];
-        if (t.date > end) break;
-        if (t.date >= start) pool.push(t);
-      }
-  
-      // top12 sans sort global si petit pool
-      const top = pool
-        .sort((a, b) => b.point - a.point)
-        .slice(0, 12);
-  
-      return top.reduce((sum, t) => sum + t.point, 0);
-    };
-  
-    return months.map((m) => {
-      const real = computeRollingTop12(m);
-  
-      // projection = même logique mais décalée dans le futur
-      const projectedDate = addMonths(m, 12);
-      const projected = computeRollingTop12(projectedDate);
+      const isPastOrCurrent =
+        startOfMonth(month) <= startOfMonth(now);
   
       return {
-        month: monthKey(m),
-        real,
-        projected
+        month: label,
+        real: isPastOrCurrent ? total : null,
+        projected: isPastOrCurrent ? null : total,
       };
     });
-  }, [tournois]);
-  
+  };
   console.log("TOURNOIS:", tournois);
   console.log("PROGRESSION:", progressionTop12);
   return (
