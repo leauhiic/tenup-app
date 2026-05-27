@@ -782,33 +782,25 @@ export default function App() {
       point: Number(t.point || 0)
     }));
   
-    return months.map((m, index) => {
+    return months.map(m => {
   
-      // fin du mois affiché
-      const endMonth = new Date(
-        m.date.getFullYear(),
-        m.date.getMonth(),
-        0
-      );
+      // fin du mois courant (correct)
+      const endMonth = endOfMonth(m.date);
   
-      // fenêtre FFT glissante exacte
-      const windowStart = new Date(
-        endMonth.getFullYear(),
-        endMonth.getMonth() - 12,
-        1
-      );
+      // fenêtre 12 mois glissants
+      const windowStart = startOfMonth(subMonths(endMonth, 11));
   
       const pool = normalized.filter(t =>
         t.dateObj >= windowStart &&
         t.dateObj <= endMonth
       );
   
-      const top12 = [...pool]
+      const top12 = pool
         .sort((a, b) => b.point - a.point)
         .slice(0, 12);
   
       return {
-        month: months[index + 1]?.label || m.label,
+        month: m.label,
         top12: top12.reduce((s, t) => s + t.point, 0),
         isFuture: false
       };
