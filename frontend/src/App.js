@@ -48,6 +48,23 @@ function getValidite(dateStr) {
     + "-" + String(future.getFullYear()).slice(-2);
 }
 
+function parseDate(s) {
+  if (!s) return new Date(0);
+
+  // ISO format
+  if (s.includes("-") && s.length >= 10) {
+    return new Date(s);
+  }
+
+  // FR format
+  if (s.includes("/")) {
+    const [j, m, a] = s.split("/");
+    return new Date(`${a}-${m}-${j}`);
+  }
+
+  return new Date(0);
+}
+
 function simulateFFTProjection(tournois, monthsForward = 12) {
 
   const base = tournois.map(t => ({
@@ -590,23 +607,6 @@ export default function App() {
     }
   };
 
-  const parseDate = (s) => {
-    if (!s) return new Date(0);
-  
-    // ISO format
-    if (s.includes("-") && s.length >= 10) {
-      return new Date(s);
-    }
-  
-    // FR format
-    if (s.includes("/")) {
-      const [j, m, a] = s.split("/");
-      return new Date(`${a}-${m}-${j}`);
-    }
-  
-    return new Date(0);
-  };
-
   const now = new Date();
   
   // Mois courant
@@ -813,22 +813,33 @@ export default function App() {
   }, [tournois, months]);
 
   const chartData = useMemo(() => {
-  
+
     const projected = simulateFFTProjection(tournois, 12);
   
-    const real = progressionTop12.map(d => ({
-      month: d.month,
-      real: d.top12,
-      projected: null
-    }));
+    // réel jusqu’au mois courant uniquement
+    const real = progressionTop12
+      .filter(d => d.month !== projected[0]?.month)
+      .map(d => ({
+        month: d.month,
+        real: d.top12,
+        projected: null
+      }));
   
+    // point de raccord
+    const bridge = {
+      month: projected[0]?.month,
+      real: progressionTop12.at(-1)?.top12 || null,
+      projected: projected[0]?.projected || null
+    };
+  
+    // projection future
     const future = projected.map(d => ({
       month: d.month,
       real: null,
       projected: d.projected
     }));
   
-    return [...real, ...future];
+    return [...real, bridge, ...future];
   
   }, [tournois, progressionTop12]);
   
