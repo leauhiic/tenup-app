@@ -808,25 +808,26 @@ export default function App() {
   
   }, [tournois, months]);
 
+
+  const realMap = new Map(
+    progressionTop12.map(d => [d.month, d.top12])
+  );
+  
+  const projectedMap = new Map(
+    simulateFFTProjection(tournois, 12).map(d => [d.month, d.projected])
+  );
+  
   const chartData = useMemo(() => {
-    const projected = simulateFFTProjection(tournois, 12) || [];
+    return months.map(m => {
+      const key = m.label;
   
-    const real = progressionTop12.map(d => ({
-      month: d.month,
-      real: d.top12 ?? 0,
-      projected: null
-    }));
-  
-    const lastReal = real.at(-1);
-  
-    const future = projected.map((d, i) => ({
-      month: d.month,
-      real: i === 0 ? lastReal?.real ?? null : null,
-      projected: d.projected ?? 0
-    }));
-  
-    return [...real, ...future];
-  }, [tournois, progressionTop12]);
+      return {
+        month: key,
+        real: realMap.get(key) ?? null,
+        projected: projectedMap.get(key) ?? null
+      };
+    });
+  }, [months, tournois, progressionTop12]);
   
   console.log("TOURNOIS:", tournois);
   console.log("PROGRESSION:", progressionTop12);
