@@ -751,18 +751,18 @@ export default function App() {
   // 12 MOIS GLISSANTS
   // ─────────────────────────────────────────────
   const months = useMemo(() => {
-    const start = startOfMonth(addMonths(now, -11)); 
-    // ou startOfMonth(new Date(2025, 4, 1)) si tu veux figé
+    const start = startOfMonth(addMonths(now, -11));
   
-    return Array.from({ length: 12 }, (_, i) => {
+    return Array.from({ length: 24 }, (_, i) => {
       const d = addMonths(start, i);
   
       return {
-        label: monthKey(d),
-        date: d
+        date: d,
+        label: format(d, "MMM yyyy")
       };
     });
   }, [now]);
+  
   const normalized = useMemo(() => {
     return tournois.map(t => ({
       ...t,
@@ -823,9 +823,9 @@ export default function App() {
       })
       .slice(0, 12);
   };
-  const buildChartData = (months, normalized, now = new Date()) => {
+  const buildChartData = (months, normalized, now) => {
     return months.map((m) => {
-      const { start, end } = getWindow(m.date); // 👈 IMPORTANT
+      const { start, end } = getWindow(m.date);
   
       const pool = normalized.filter((t) => {
         const d = t.dateObj;
@@ -833,17 +833,14 @@ export default function App() {
       });
   
       const top12 = getTop12(pool);
-      const total = top12.reduce((sum, t) => sum + t.point, 0);
+      const total = top12.reduce((s, t) => s + t.point, 0);
   
-      const label = format(m.date, "MMM yyyy"); // 👈 FIX
-  
-      const isPastOrCurrent =
-        startOfMonth(m.date) <= startOfMonth(now);
+      const isPastOrCurrent = m.date <= now;
   
       return {
-        month: label,
+        month: m.label,
         real: isPastOrCurrent ? total : null,
-        projected: isPastOrCurrent ? null : total,
+        projected: !isPastOrCurrent ? total : null,
       };
     });
   };
@@ -1050,7 +1047,7 @@ export default function App() {
         <ResponsiveContainer>
           <LineChart data={chartData}>
       
-            <XAxis dataKey="month" interval={0} />
+            <XAxis dataKey="month" interval={2} />
             <YAxis />
             <Tooltip />
       
