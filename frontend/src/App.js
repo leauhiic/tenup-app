@@ -80,7 +80,7 @@ function simulateFFTProjection(tournois, monthsForward = 12) {
   for (let i = 1; i <= monthsForward; i++) {
 
     // mois projeté
-    const refDate = addMonths(now, i+1);
+    const refDate = addMonths(now, i);
 
     // fenêtre FFT glissante
     const windowStart = new Date(
