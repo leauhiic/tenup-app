@@ -980,7 +980,43 @@ export default function App() {
         </div>
       </div>
 
-      {/* FILTRES */}
+                
+      {/* PROGRESSION TOP 12 */}
+      {/* CHART 13 MOIS */}
+      <div style={{ width: "100%", height: 340 }}>
+        <ResponsiveContainer>
+          <LineChart data={chartData}>
+      
+            <XAxis dataKey="month" interval={2} />
+            <YAxis />
+            <Tooltip />
+      
+            {/* RÉEL */}
+            <Line
+              type="monotone"
+              dataKey="real"
+              stroke="#00e676"
+              strokeWidth={3}
+              dot
+              connectNulls={false}
+            />
+      
+            {/* PROJECTION */}
+            <Line
+              type="monotone"
+              dataKey="projected"
+              stroke="#00e676"
+              strokeDasharray="6 6"
+              strokeWidth={2}
+              dot={false}
+              connectNulls={false}
+            />
+      
+          </LineChart>
+        </ResponsiveContainer>
+      </div>
+
+{/* FILTRES */}
       <div className="filters">
         <input className="filter-search" placeholder="🔍  Rechercher tournoi ou partenaire…"
           value={search} onChange={e => setSearch(e.target.value)} />
@@ -1042,42 +1078,6 @@ export default function App() {
           </table>
         )}
       </div>
-          
-      {/* PROGRESSION TOP 12 */}
-      {/* CHART 13 MOIS */}
-      <div style={{ width: "100%", height: 340 }}>
-        <ResponsiveContainer>
-          <LineChart data={chartData}>
-      
-            <XAxis dataKey="month" interval={2} />
-            <YAxis />
-            <Tooltip />
-      
-            {/* RÉEL */}
-            <Line
-              type="monotone"
-              dataKey="real"
-              stroke="#00e676"
-              strokeWidth={3}
-              dot
-              connectNulls={false}
-            />
-      
-            {/* PROJECTION */}
-            <Line
-              type="monotone"
-              dataKey="projected"
-              stroke="#00e676"
-              strokeDasharray="6 6"
-              strokeWidth={2}
-              dot={false}
-              connectNulls={false}
-            />
-      
-          </LineChart>
-        </ResponsiveContainer>
-      </div>
-
       {/* ALERTE TOURNOIS PERDUS */}
       {tournoisPerdus.length > 0 && (
         <>
