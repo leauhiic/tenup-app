@@ -1,44 +1,188 @@
 const express = require("express");
 const cors = require("cors");
+require("dotenv").config();
 
 const app = express();
-app.use(cors());
+const PORT = process.env.PORT || 3000;
+const ADMIN_API_KEY = process.env.ADMIN_API_KEY;
+const allowedOrigins = (process.env.CORS_ORIGINS || "")
+  .split(",")
+  .map(origin => origin.trim())
+  .filter(Boolean);
+
+app.use(cors({
+  origin(origin, callback) {
+    if (!origin || allowedOrigins.length === 0 || allowedOrigins.includes(origin)) {
+      callback(null, true);
+      return;
+    }
+
+    callback(new Error("Origin not allowed by CORS"));
+  }
+}));
 app.use(express.json());
 
 const db = require("./db");
+const seedData = require("./tournois-202605.json");
 
-app.get("/init-db", async (req, res) => {
+const CATEGORIES = new Set(["DM", "DD", "DX"]);
+
+function requireAdmin(req, res, next) {
+  if (!ADMIN_API_KEY) {
+    return res.status(503).json({ error: "ADMIN_API_KEY is not configured" });
+  }
+
+  const authHeader = req.get("authorization") || "";
+  const bearerToken = authHeader.startsWith("Bearer ")
+    ? authHeader.slice("Bearer ".length)
+    : null;
+  const token = bearerToken || req.get("x-api-key");
+
+  if (token !== ADMIN_API_KEY) {
+    return res.status(401).json({ error: "Unauthorized" });
+  }
+
+  next();
+}
+
+function parseDateToISO(value) {
+  if (typeof value !== "string") return null;
+
+  if (/^\d{4}-\d{2}-\d{2}$/.test(value)) return value;
+
+  const frMatch = value.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+  if (frMatch) {
+    const [, day, month, year] = frMatch;
+    return `${year}-${month}-${day}`;
+  }
+
+  return null;
+}
+
+function parsePositiveInteger(value) {
+  const number = Number(value);
+  if (!Number.isInteger(number) || number <= 0) return null;
+  return number;
+}
+
+function cleanText(value, maxLength = 160) {
+  if (typeof value !== "string") return "";
+  return value.trim().slice(0, maxLength);
+}
+
+function validateTournoiPayload(payload = {}) {
+  const date = parseDateToISO(payload.date);
+  const nom = cleanText(payload.nom);
+  const categorie = cleanText(payload.categorie, 2).toUpperCase();
+  const partenaire = cleanText(payload.partenaire);
+  const classement = parsePositiveInteger(payload.classement);
+  const point = parsePositiveInteger(payload.point);
+  const validite = cleanText(payload.validite, 20);
+
+  if (!date) return { error: "date must be YYYY-MM-DD or DD/MM/YYYY" };
+  if (!nom) return { error: "nom is required" };
+  if (!CATEGORIES.has(categorie)) return { error: "categorie must be DM, DD or DX" };
+  if (!partenaire) return { error: "partenaire is required" };
+  if (!classement) return { error: "classement must be a positive integer" };
+  if (!point) return { error: "point must be a positive integer" };
+
+  return {
+    value: { date, nom, categorie, partenaire, classement, point, validite }
+  };
+}
+
+async function insertTournoi(tournoi) {
+  await db.query(
+    `INSERT INTO tournois (date, nom, categorie, partenaire, classement, point, validite)
+     VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+    [
+      tournoi.date,
+      tournoi.nom,
+      tournoi.categorie,
+      tournoi.partenaire,
+      tournoi.classement,
+      tournoi.point,
+      tournoi.validite
+    ]
+  );
+}
+
+async function insertTournoiIfMissing(tournoi) {
+  await db.query(
+    `INSERT INTO tournois (date, nom, categorie, partenaire, classement, point, validite)
+     VALUES ($1, $2, $3, $4, $5, $6, $7)
+     ON CONFLICT DO NOTHING`,
+    [
+      tournoi.date,
+      tournoi.nom,
+      tournoi.categorie,
+      tournoi.partenaire,
+      tournoi.classement,
+      tournoi.point,
+      tournoi.validite
+    ]
+  );
+}
+
+app.post("/init-db", requireAdmin, async (req, res) => {
   try {
     await db.query(`
       CREATE TABLE IF NOT EXISTS tournois (
         id SERIAL PRIMARY KEY,
-        date TEXT,
-        nom TEXT,
-        categorie TEXT,
-        partenaire TEXT,
-        classement INTEGER,
-        point INTEGER,
+        date DATE NOT NULL,
+        nom TEXT NOT NULL,
+        categorie TEXT NOT NULL CHECK (categorie IN ('DM', 'DD', 'DX')),
+        partenaire TEXT NOT NULL,
+        classement INTEGER NOT NULL CHECK (classement > 0),
+        point INTEGER NOT NULL CHECK (point > 0),
         validite TEXT
       )
     `);
+    await db.query(`
+      ALTER TABLE tournois
+      ALTER COLUMN date TYPE DATE
+      USING CASE
+        WHEN date::TEXT ~ '^\\d{2}/\\d{2}/\\d{4}$' THEN to_date(date::TEXT, 'DD/MM/YYYY')
+        ELSE date::DATE
+      END
+    `);
+    await db.query("ALTER TABLE tournois ALTER COLUMN date SET NOT NULL");
+    await db.query("ALTER TABLE tournois ALTER COLUMN nom SET NOT NULL");
+    await db.query("ALTER TABLE tournois ALTER COLUMN categorie SET NOT NULL");
+    await db.query("ALTER TABLE tournois ALTER COLUMN partenaire SET NOT NULL");
+    await db.query("ALTER TABLE tournois ALTER COLUMN classement SET NOT NULL");
+    await db.query("ALTER TABLE tournois ALTER COLUMN point SET NOT NULL");
+    await db.query(`
+      CREATE UNIQUE INDEX IF NOT EXISTS tournois_identity_idx
+      ON tournois (date, nom, categorie, partenaire, classement, point)
+    `);
 
-    res.send("✅ Table créée avec succès");
+    res.json({ message: "Table tournois ready" });
   } catch (err) {
     console.error(err);
-    res.status(500).send(err.message);
+    res.status(500).json({ error: err.message });
   }
 });
 
 app.get("/", (req, res) => {
-  res.send("✅ Backend connecté TenUp OK");
+  res.json({ status: "ok", service: "tenup-api" });
 });
-
-// ✅ scraping automatique connecté
-
 
 app.get("/tournois", async (req, res) => {
   try {
-    const result = await db.query("SELECT * FROM tournois");
+    const result = await db.query(`
+      SELECT
+        id,
+        TO_CHAR(date, 'DD/MM/YYYY') AS date,
+        nom,
+        categorie,
+        partenaire,
+        classement,
+        point,
+        validite
+      FROM tournois
+      ORDER BY date DESC, point DESC
+    `);
 
     res.json(result.rows);
   } catch (err) {
@@ -47,52 +191,56 @@ app.get("/tournois", async (req, res) => {
   }
 });
 
-app.post("/tournois", async (req, res) => {
-  const { date, nom, categorie, partenaire, classement, point, validite } = req.body;
+app.post("/tournois", requireAdmin, async (req, res) => {
+  const validation = validateTournoiPayload(req.body);
+  if (validation.error) {
+    return res.status(400).json({ error: validation.error });
+  }
 
   try {
-    await db.query(
-      `INSERT INTO tournois (date, nom, categorie, partenaire, classement, point, validite)
-       VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-      [date, nom, categorie, partenaire, classement, point, validite]
-    );
-
-    res.send("✅ Tournoi ajouté");
+    await insertTournoi(validation.value);
+    res.status(201).json({ message: "Tournoi ajoute" });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
 
-const data = require("./tournois-202605.json");
-
-app.get("/import-from-2026mai", async (req, res) => {
+app.post("/import-from-2026mai", requireAdmin, async (req, res) => {
   try {
-    // ⚠️ nettoie avant import (optionnel)
-    await db.query("DELETE FROM tournois");
+    const replace = req.query.replace === "true";
 
-    for (const t of data) {
-      await db.query(
-        `INSERT INTO tournois (date, nom, categorie, partenaire, classement, point, validite)
-         VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-        [
-          t["Date"],
-          t["Nom"],
-          t["Catégorie"],
-          t["Partenaire"],
-          t["Classement"],
-          t["Point"],
-          t["Validité"]
-        ]
-      );
+    if (replace) {
+      await db.query("TRUNCATE TABLE tournois RESTART IDENTITY");
     }
 
-    res.send("✅ Import réussi !");
+    let imported = 0;
+
+    for (const t of seedData) {
+      const validation = validateTournoiPayload({
+        date: t.Date,
+        nom: t.Nom,
+        categorie: t.Catégorie,
+        partenaire: t.Partenaire,
+        classement: t.Classement,
+        point: t.Point,
+        validite: t.Validité
+      });
+
+      if (validation.error) {
+        throw new Error(`Invalid seed row "${t.Nom}": ${validation.error}`);
+      }
+
+      await insertTournoiIfMissing(validation.value);
+      imported += 1;
+    }
+
+    res.json({ message: "Import reussi", imported, replaced: replace });
   } catch (err) {
     console.error(err);
-    res.status(500).send(err.message);
+    res.status(500).json({ error: err.message });
   }
 });
 
-app.listen(3000, () => {
-  console.log("✅ Backend prêt");
+app.listen(PORT, () => {
+  console.log(`TenUp API listening on port ${PORT}`);
 });
