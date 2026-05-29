@@ -136,7 +136,7 @@ app.post("/init-db", requireAdmin, async (req, res) => {
       ALTER TABLE tournois
       ALTER COLUMN date TYPE DATE
       USING CASE
-        WHEN date::TEXT ~ '^\\d{2}/\\d{2}/\\d{4}$' THEN to_date(date::TEXT, 'DD/MM/YYYY')
+        WHEN date::TEXT ~ '^[0-9]{2}/[0-9]{2}/[0-9]{4}$' THEN to_date(date::TEXT, 'DD/MM/YYYY')
         ELSE date::DATE
       END
     `);
@@ -165,7 +165,7 @@ app.get("/tournois", async (req, res) => {
         id,
         TO_CHAR(
           CASE
-            WHEN date::TEXT ~ '^\d{2}/\d{2}/\d{4}$' THEN to_date(date::TEXT, 'DD/MM/YYYY')
+            WHEN date::TEXT ~ '^[0-9]{2}/[0-9]{2}/[0-9]{4}$' THEN to_date(date::TEXT, 'DD/MM/YYYY')
             ELSE date::DATE
           END,
           'DD/MM/YYYY'
@@ -179,7 +179,7 @@ app.get("/tournois", async (req, res) => {
       FROM tournois
       ORDER BY
         CASE
-          WHEN date::TEXT ~ '^\d{2}/\d{2}/\d{4}$' THEN to_date(date::TEXT, 'DD/MM/YYYY')
+          WHEN date::TEXT ~ '^[0-9]{2}/[0-9]{2}/[0-9]{4}$' THEN to_date(date::TEXT, 'DD/MM/YYYY')
           ELSE date::DATE
         END DESC,
         point DESC
