@@ -32,6 +32,12 @@ npm run login:tenup
 node -e "const fs=require('fs'); console.log(JSON.stringify(JSON.parse(fs.readFileSync('storageState.json','utf8'))))"
 ```
 
+Si TenUp change son point d'entree de connexion, il est possible de forcer l'URL de login :
+
+```bash
+TENUP_LOGIN_URL="https://login.fft.fr/realms/connect/protocol/openid-connect/auth?..." npm run login:tenup
+```
+
 La valeur affichee par la derniere commande est sensible : elle contient les cookies de session TenUp. Ne pas la committer.
 
 ## Lancer manuellement
