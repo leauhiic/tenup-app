@@ -4,16 +4,18 @@
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
-    "postinstall": "npx playwright install chromium"
+    "login:tenup": "node login-once.js"
+  },
+  "engines": {
+    "node": ">=18"
   },
   "dependencies": {
-    "axios": "^1.6.0",
     "cors": "^2.8.5",
     "dotenv": "^16.4.0",
     "express": "^4.18.0",
-    "tough-cookie": "^4.1.3",
-    "axios-cookiejar-support": "^5.0.0",
-    "pg": "^8.11.0",
+    "pg": "^8.11.0"
+  },
+  "devDependencies": {
     "playwright": "^1.40.0"
   }
 }

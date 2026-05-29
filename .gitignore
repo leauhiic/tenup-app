@@ -1,2 +1,7 @@
 node_modules
 .env
+frontend/.env
+storageState.json
+npm-debug.log*
+build
+frontend/build
