@@ -1,3 +1,7 @@
+(() => {
+if (window.__tenupAppSyncContentLoaded) return;
+window.__tenupAppSyncContentLoaded = true;
+
 const BRIDGE_SOURCE = "tenup-app-sync-bridge";
 const CONTENT_SOURCE = "tenup-app-sync-content";
 const capturedPayloads = [];
@@ -389,3 +393,4 @@ function summarizePayload(entry) {
     error: entry?.error
   };
 }
+})();
