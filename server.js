@@ -26,7 +26,8 @@ function isAllowedOrigin(origin) {
   if (allowedOrigins.includes(origin)) return true;
 
   try {
-    const { hostname } = new URL(origin);
+    const { hostname, protocol } = new URL(origin);
+    if (protocol === "chrome-extension:" || protocol === "moz-extension:") return true;
     return hostname === "localhost" || hostname.endsWith(".vercel.app");
   } catch (err) {
     return false;
@@ -390,6 +391,18 @@ require("./sync-routes")(app, {
   insertTournoiIfMissing,
   getDb,
   cleanText
+});
+
+app.use((err, req, res, next) => {
+  console.error(err);
+  if (res.headersSent) {
+    next(err);
+    return;
+  }
+
+  res.status(err.message === "Origin not allowed by CORS" ? 403 : 500).json({
+    error: err.message || "Internal Server Error"
+  });
 });
 
 function listen(port) {
