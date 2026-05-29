@@ -4,7 +4,8 @@
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
-    "login:tenup": "node login-once.js"
+    "login:tenup": "node login-once.js",
+    "sync:tenup": "node scripts/sync-tenup.js"
   },
   "engines": {
     "node": ">=18"
