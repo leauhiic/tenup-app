@@ -319,11 +319,37 @@ async function postImport(settings, tournois) {
       tournois
     })
   });
-  const data = await response.json().catch(() => ({}));
+  const text = await response.text();
+  const data = parseJson(text);
 
   if (!response.ok) {
-    throw new Error(data.error || `Import API failed with ${response.status}`);
+    const detail = data.error || extractTextError(text);
+    if (response.status === 404) {
+      throw new Error("Route /tournois/import introuvable. Merge et redeploie la PR backend sur Railway.");
+    }
+
+    throw new Error(detail
+      ? `Import API failed with ${response.status}: ${detail}`
+      : `Import API failed with ${response.status}`);
   }
 
   return data;
+}
+
+function parseJson(text) {
+  try {
+    return text ? JSON.parse(text) : {};
+  } catch (err) {
+    return {};
+  }
+}
+
+function extractTextError(text) {
+  return String(text || "")
+    .replace(/<style[\s\S]*?<\/style>/gi, " ")
+    .replace(/<script[\s\S]*?<\/script>/gi, " ")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 220);
 }
