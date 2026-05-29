@@ -43,9 +43,11 @@ Clique ensuite `Enregistrer`.
 3. Va sur la page classement padel.
 4. Recharge la page pour que l'extension capture les donnees reseau.
 5. Clique sur l'extension.
-6. Clique `Synchroniser maintenant`.
+6. Clique `Tester la lecture`.
+7. Si au moins un tournoi est detecte, clique `Synchroniser maintenant`.
 
 Si l'import reussit, le popup affiche le nombre de tournois importes et ignores.
+`Tester la lecture` ne contacte pas Railway ; il sert uniquement a verifier que l'extension voit les donnees TenUp de ta page connectee.
 
 ## Synchro automatique le 7
 
