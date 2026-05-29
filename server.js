@@ -1,3 +1,4 @@
+const crypto = require("crypto");
 const express = require("express");
 const cors = require("cors");
 require("dotenv").config();
@@ -6,6 +7,9 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 const HOST = "0.0.0.0";
 const ADMIN_API_KEY = process.env.ADMIN_API_KEY;
+const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || ADMIN_API_KEY;
+const ADMIN_TOKEN_SECRET = process.env.ADMIN_TOKEN_SECRET || ADMIN_API_KEY;
+const TOKEN_TTL_MS = 12 * 60 * 60 * 1000;
 const allowedOrigins = (process.env.CORS_ORIGINS || "")
   .split(",")
   .map(origin => origin.trim())
@@ -44,22 +48,70 @@ app.use(express.json());
 const seedData = require("./tournois-202605.json");
 const CATEGORIES = new Set(["DM", "DD", "DX"]);
 
-function requireAdmin(req, res, next) {
-  if (!ADMIN_API_KEY) {
-    return res.status(503).json({ error: "ADMIN_API_KEY is not configured" });
-  }
+function base64url(input) {
+  return Buffer.from(input).toString("base64url");
+}
 
+function signTokenBody(body) {
+  return crypto
+    .createHmac("sha256", ADMIN_TOKEN_SECRET)
+    .update(body)
+    .digest("base64url");
+}
+
+function safeCompare(a, b) {
+  const left = Buffer.from(String(a || ""));
+  const right = Buffer.from(String(b || ""));
+  if (left.length !== right.length) return false;
+  return crypto.timingSafeEqual(left, right);
+}
+
+function createAdminToken() {
+  const payload = {
+    role: "admin",
+    exp: Date.now() + TOKEN_TTL_MS
+  };
+  const body = base64url(JSON.stringify(payload));
+  return `${body}.${signTokenBody(body)}`;
+}
+
+function verifyAdminToken(token) {
+  if (!ADMIN_TOKEN_SECRET || typeof token !== "string") return false;
+
+  const [body, signature] = token.split(".");
+  if (!body || !signature) return false;
+  if (!safeCompare(signature, signTokenBody(body))) return false;
+
+  try {
+    const payload = JSON.parse(Buffer.from(body, "base64url").toString("utf8"));
+    return payload.role === "admin" && Number(payload.exp) > Date.now();
+  } catch (err) {
+    return false;
+  }
+}
+
+function getBearerToken(req) {
   const authHeader = req.get("authorization") || "";
-  const bearerToken = authHeader.startsWith("Bearer ")
+  return authHeader.startsWith("Bearer ")
     ? authHeader.slice("Bearer ".length)
     : null;
-  const token = bearerToken || req.get("x-api-key");
+}
 
-  if (token !== ADMIN_API_KEY) {
-    return res.status(401).json({ error: "Unauthorized" });
+function requireAdmin(req, res, next) {
+  const bearerToken = getBearerToken(req);
+  const apiKey = req.get("x-api-key");
+
+  if (ADMIN_API_KEY && apiKey && safeCompare(apiKey, ADMIN_API_KEY)) {
+    next();
+    return;
   }
 
-  next();
+  if (bearerToken && verifyAdminToken(bearerToken)) {
+    next();
+    return;
+  }
+
+  res.status(401).json({ error: "Unauthorized" });
 }
 
 function parseDateToISO(value) {
@@ -105,6 +157,11 @@ function validateTournoiPayload(payload = {}) {
   return { value: { date, nom, categorie, partenaire, classement, point, validite } };
 }
 
+function parseId(value) {
+  const id = Number(value);
+  return Number.isInteger(id) && id > 0 ? id : null;
+}
+
 async function insertTournoi(tournoi) {
   await getDb().query(
     `INSERT INTO tournois (date, nom, categorie, partenaire, classement, point, validite)
@@ -128,6 +185,27 @@ app.get("/", (req, res) => {
 
 app.get("/healthz", (req, res) => {
   res.json({ status: "ok", service: "tenup-api", port: PORT });
+});
+
+app.post("/auth/login", (req, res) => {
+  if (!ADMIN_PASSWORD || !ADMIN_TOKEN_SECRET) {
+    res.status(503).json({ error: "Admin login is not configured" });
+    return;
+  }
+
+  if (!safeCompare(req.body?.password, ADMIN_PASSWORD)) {
+    res.status(401).json({ error: "Invalid password" });
+    return;
+  }
+
+  res.json({
+    token: createAdminToken(),
+    expiresAt: new Date(Date.now() + TOKEN_TTL_MS).toISOString()
+  });
+});
+
+app.get("/auth/me", requireAdmin, (req, res) => {
+  res.json({ role: "admin" });
 });
 
 app.post("/init-db", requireAdmin, async (req, res) => {
@@ -213,6 +291,54 @@ app.post("/tournois", requireAdmin, async (req, res) => {
   try {
     await insertTournoi(validation.value);
     res.status(201).json({ message: "Tournoi ajoute" });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.put("/tournois/:id", requireAdmin, async (req, res) => {
+  const id = parseId(req.params.id);
+  if (!id) {
+    return res.status(400).json({ error: "Invalid tournament id" });
+  }
+
+  const validation = validateTournoiPayload(req.body);
+  if (validation.error) {
+    return res.status(400).json({ error: validation.error });
+  }
+
+  try {
+    const t = validation.value;
+    const result = await getDb().query(
+      `UPDATE tournois
+       SET date = $1, nom = $2, categorie = $3, partenaire = $4, classement = $5, point = $6, validite = $7
+       WHERE id = $8`,
+      [t.date, t.nom, t.categorie, t.partenaire, t.classement, t.point, t.validite, id]
+    );
+
+    if (result.rowCount === 0) {
+      return res.status(404).json({ error: "Tournament not found" });
+    }
+
+    res.json({ message: "Tournoi modifie" });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.delete("/tournois/:id", requireAdmin, async (req, res) => {
+  const id = parseId(req.params.id);
+  if (!id) {
+    return res.status(400).json({ error: "Invalid tournament id" });
+  }
+
+  try {
+    const result = await getDb().query("DELETE FROM tournois WHERE id = $1", [id]);
+    if (result.rowCount === 0) {
+      return res.status(404).json({ error: "Tournament not found" });
+    }
+
+    res.json({ message: "Tournoi supprime" });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

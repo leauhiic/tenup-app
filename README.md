@@ -12,9 +12,9 @@ Dashboard personnel pour suivre des resultats de padel TenUp/FFT, calculer le to
 
 Ne commit jamais de fichier `.env`. Le depot contenait auparavant des secrets en clair : ils doivent etre revoques et remplaces cote TenUp/Railway avant de redeployer.
 
-Les mutations de donnees sont protegees par `ADMIN_API_KEY`. Le frontend demande cette cle au moment de l'ajout d'un tournoi et la garde en `sessionStorage` pour la session courante.
+L'administration passe maintenant par un mot de passe serveur (`ADMIN_PASSWORD`). Le frontend appelle `POST /auth/login`, recoit un jeton court en `sessionStorage`, puis utilise `Authorization: Bearer` pour ajouter, modifier ou supprimer un tournoi.
 
-Pour une app partagee publiquement, remplace cette cle simple par une vraie authentification serveur.
+`ADMIN_API_KEY` reste accepte pour les scripts et les appels API directs via `x-api-key`. Garde `ADMIN_PASSWORD`, `ADMIN_TOKEN_SECRET` et `ADMIN_API_KEY` differents de valeurs publiques.
 
 ## Backend
 
@@ -28,17 +28,24 @@ npm start
 Variables :
 
 - `DATABASE_URL` : URL PostgreSQL.
-- `ADMIN_API_KEY` : cle obligatoire pour les routes admin et d'ecriture.
+- `ADMIN_PASSWORD` : mot de passe saisi dans l'interface admin.
+- `ADMIN_TOKEN_SECRET` : secret de signature des jetons admin.
+- `ADMIN_API_KEY` : cle legacy pour scripts/admin API directs.
 - `CORS_ORIGINS` : origines autorisees separees par des virgules, par exemple `http://localhost:3001,https://app.example`.
 - `PORT` : port HTTP, `3000` par defaut.
 
 Routes :
 
 - `GET /` : healthcheck.
+- `GET /healthz` : healthcheck detaille.
+- `POST /auth/login` : ouvre une session admin avec `ADMIN_PASSWORD`.
+- `GET /auth/me` : verifie une session admin.
 - `GET /tournois` : liste publique des tournois.
-- `POST /tournois` : ajoute un tournoi, requiert `x-api-key` ou `Authorization: Bearer`.
-- `POST /init-db` : cree/migre la table, requiert la cle admin.
-- `POST /import-from-2026mai` : importe `tournois-202605.json` sans dupliquer les lignes deja presentes, requiert la cle admin.
+- `POST /tournois` : ajoute un tournoi, requiert `Authorization: Bearer` ou `x-api-key`.
+- `PUT /tournois/:id` : modifie un tournoi, requiert admin.
+- `DELETE /tournois/:id` : supprime un tournoi, requiert admin.
+- `POST /init-db` : cree/migre la table, requiert admin.
+- `POST /import-from-2026mai` : importe `tournois-202605.json` sans dupliquer les lignes deja presentes, requiert admin.
 - `POST /import-from-2026mai?replace=true` : vide la table puis importe le seed.
 
 Exemple :
@@ -61,6 +68,8 @@ npm start
 Variables :
 
 - `REACT_APP_API_URL` : URL de l'API, par defaut l'API Railway historique.
+
+L'interface affiche un etat de chargement, un bouton de rafraichissement, la derniere synchronisation reussie, les actions admin modifier/supprimer et des badges de statut : top 12, hors top 12, mois courant, expire ce mois et historique.
 
 ## Tests
 
