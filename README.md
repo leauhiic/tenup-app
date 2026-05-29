@@ -73,6 +73,12 @@ Variables :
 
 L'interface affiche un etat de chargement, un bouton de rafraichissement, la derniere synchronisation reussie, les actions admin modifier/supprimer et des badges de statut : top 12, hors top 12, mois courant, expire ce mois et historique.
 
+## Extension Chrome
+
+Le dossier `extension` contient une extension Chrome locale pour synchroniser TenUp depuis une session utilisateur normale. Elle ajoute une synchro manuelle et une verification locale le 7 du mois quand Chrome est ouvert.
+
+La configuration et le test sont documentes dans `docs/tenup-sync.md`.
+
 ## Tests
 
 Les premiers tests couvrent la logique FFT extraite dans `frontend/src/fft.js`.
@@ -87,4 +93,4 @@ npm test -- --watchAll=false
 - Les dates sont normalisees cote API et stockees comme `DATE`.
 - Le backend refuse les categories hors `DM`, `DD`, `DX`.
 - Le Dockerfile installe seulement les dependances runtime de l'API. Le script Playwright `login-once.js` reste disponible en local via `npm run login:tenup`.
-- La synchro TenUp mensuelle est documentee dans `docs/tenup-sync.md`.
+- La synchro TenUp via Chrome est documentee dans `docs/tenup-sync.md`.
