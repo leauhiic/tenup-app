@@ -179,6 +179,32 @@ function normalizeCategorie(value) {
   return "";
 }
 
+function firstCategorie(row) {
+  const flat = flattenObject(row);
+  const preferredKeys = [
+    "epreuve",
+    "typeEpreuve",
+    "tableau",
+    "discipline",
+    "categorie",
+    "cat"
+  ];
+
+  for (const key of preferredKeys.map(normalizeKey)) {
+    const categorie = normalizeCategorie(flat[key]);
+    if (categorie) return categorie;
+  }
+
+  for (const [key, value] of Object.entries(flat)) {
+    if (!preferredKeys.some(candidate => key.includes(normalizeKey(candidate)))) continue;
+
+    const categorie = normalizeCategorie(value);
+    if (categorie) return categorie;
+  }
+
+  return "";
+}
+
 function normalizeTournoi(row) {
   const date = parseDateToISO(firstValue(row, [
     "date",
@@ -197,14 +223,7 @@ function normalizeTournoi(row) {
     "libelle",
     "libelleTournoi"
   ]));
-  const categorie = normalizeCategorie(firstValue(row, [
-    "categorie",
-    "cat",
-    "tableau",
-    "discipline",
-    "typeEpreuve",
-    "epreuve"
-  ]));
+  const categorie = firstCategorie(row);
   const partenaire = cleanText(firstValue(row, [
     "partenaire",
     "partenaireNom",
@@ -284,6 +303,9 @@ function extractTournois(payloads) {
 }
 
 function extractDomRows() {
+  const rankingRows = extractRankingTableRows();
+  if (rankingRows.length) return rankingRows;
+
   const rows = [];
   const elements = Array.from(document.querySelectorAll("table tr, [role='row']"));
 
@@ -301,6 +323,48 @@ function extractDomRows() {
       point: text.match(/(\d+)\s*(?:pts|points?)/i)?.[1] || "",
       validite: ""
     });
+  }
+
+  return rows;
+}
+
+function extractRankingTableRows() {
+  const rows = [];
+  const tables = Array.from(document.querySelectorAll("table#custom-table, table.table-ranking"));
+
+  for (const table of tables) {
+    const columns = Array.from(table.querySelectorAll("thead th")).map(th => (
+      th.dataset.dynatableColumn || cleanText(th.textContent, 40)
+    ));
+
+    for (const tr of Array.from(table.querySelectorAll("tbody tr"))) {
+      const cells = Array.from(tr.children).filter(cell => cell.tagName === "TD");
+      const byColumn = {};
+
+      columns.forEach((column, index) => {
+        if (!column || !cells[index]) return;
+        byColumn[column] = cleanText(cells[index].innerText || cells[index].textContent, 220);
+      });
+
+      const row = {
+        date: byColumn.fin,
+        nom: byColumn.competition,
+        type: byColumn.categorie,
+        categorie: byColumn.epreuve,
+        epreuve: byColumn.epreuve,
+        partenaire: byColumn.partenaire,
+        classement: byColumn.classementEquipe,
+        point: byColumn.points,
+        validite: byColumn.calcul,
+        fin: byColumn.fin,
+        competition: byColumn.competition,
+        classementEquipe: byColumn.classementEquipe,
+        points: byColumn.points,
+        calcul: byColumn.calcul
+      };
+
+      if (row.date && row.nom) rows.push(row);
+    }
   }
 
   return rows;
