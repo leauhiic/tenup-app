@@ -6,6 +6,7 @@ const DEFAULT_SETTINGS = {
   autoSyncEnabled: true
 };
 const MONTHLY_ALARM = "monthly-tenup-sync";
+const MISSING_RECEIVER_PATTERN = /Receiving end does not exist|Could not establish connection/i;
 
 chrome.runtime.onInstalled.addListener(() => {
   getSettings().then(settings => scheduleNextMonthlySync(settings));
@@ -170,16 +171,30 @@ async function collectFromTenUp({ active, settings }) {
 
   const tab = await openOrFindTenUpTab(currentSettings, { active });
   await waitForTabReady(tab.id);
-  const collection = await sendTabMessage(tab.id, {
-    type: "COLLECT_TENUP",
-    personId: currentSettings.personId
-  });
+  const collection = await sendCollectMessage(tab.id, currentSettings.personId);
 
   if (!collection?.ok) {
     throw new Error(collection?.error || "Impossible de lire la page TenUp");
   }
 
   return collection;
+}
+
+async function sendCollectMessage(tabId, personId) {
+  const message = {
+    type: "COLLECT_TENUP",
+    personId
+  };
+
+  try {
+    return await sendTabMessage(tabId, message);
+  } catch (err) {
+    if (!MISSING_RECEIVER_PATTERN.test(err.message || "")) throw err;
+
+    await injectContentScript(tabId);
+    await delay(250);
+    return sendTabMessage(tabId, message);
+  }
 }
 
 function validateSettings(settings) {
@@ -269,6 +284,27 @@ function sendTabMessage(tabId, message) {
       else resolve(response);
     });
   });
+}
+
+function injectContentScript(tabId) {
+  if (!chrome.scripting?.executeScript) {
+    throw new Error("Script TenUp non charge. Recharge l'extension puis la page TenUp.");
+  }
+
+  return new Promise((resolve, reject) => {
+    chrome.scripting.executeScript({
+      target: { tabId },
+      files: ["content.js"]
+    }, () => {
+      const err = chrome.runtime.lastError;
+      if (err) reject(new Error(err.message));
+      else resolve();
+    });
+  });
+}
+
+function delay(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
 }
 
 async function postImport(settings, tournois) {
