@@ -12,6 +12,8 @@ async function resolveLoginUrl(page) {
   await page.goto(TENUP_HOME_URL, {
     waitUntil: "domcontentloaded",
   });
+  await page.waitForURL("**tenup.fft.fr/**", { timeout: 60000 }).catch(() => {});
+  await page.waitForLoadState("networkidle", { timeout: 10000 }).catch(() => {});
 
   return page.evaluate(async () => {
     const response = await fetch("/login", { credentials: "include" });
@@ -19,7 +21,12 @@ async function resolveLoginUrl(page) {
       throw new Error(`TenUp login endpoint failed with ${response.status}`);
     }
 
-    const loginUrl = await response.json();
+    const payload = await response.json();
+    const loginUrl = typeof payload === "string" ? payload : payload?.url || payload?.loginUrl;
+    if (!loginUrl) {
+      throw new Error("TenUp login endpoint returned an unknown payload");
+    }
+
     const separator = loginUrl.includes("?") ? "&" : "?";
     return `${loginUrl}${separator}redirect_uri=${window.location.origin}/api/auth/callback`;
   });
