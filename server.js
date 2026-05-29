@@ -4,6 +4,7 @@ require("dotenv").config();
 
 const app = express();
 const PORT = process.env.PORT || 3000;
+const HOST = "0.0.0.0";
 const ADMIN_API_KEY = process.env.ADMIN_API_KEY;
 const allowedOrigins = (process.env.CORS_ORIGINS || "")
   .split(",")
@@ -111,6 +112,10 @@ async function insertTournoiIfMissing(tournoi) {
 
 app.get("/", (req, res) => {
   res.json({ status: "ok", service: "tenup-api" });
+});
+
+app.get("/healthz", (req, res) => {
+  res.json({ status: "ok", service: "tenup-api", port: PORT });
 });
 
 app.post("/init-db", requireAdmin, async (req, res) => {
@@ -237,6 +242,6 @@ app.post("/import-from-2026mai", requireAdmin, async (req, res) => {
   }
 });
 
-app.listen(PORT, () => {
-  console.log(`TenUp API listening on port ${PORT}`);
+app.listen(PORT, HOST, () => {
+  console.log(`TenUp API listening on ${HOST}:${PORT}`);
 });
