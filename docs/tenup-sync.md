@@ -1,86 +1,73 @@
-# Synchronisation mensuelle TenUp
+# Synchronisation TenUp avec Chrome
 
-Le depot contient un job GitHub Actions qui peut verifier TenUp le 7 de chaque mois et importer les nouveaux tournois dans l'API Railway.
+TenUp bloque les navigateurs automatises. La synchronisation passe donc par une extension Chrome locale, qui utilise ta session TenUp normale au lieu de stocker ton mot de passe.
 
 ## Principe
 
-TenUp protege la page classement avec Queue-it et une session utilisateur. Le job ne stocke pas le mot de passe TenUp : il reutilise un `storageState.json` Playwright genere localement apres une connexion manuelle.
+1. Tu te connectes a TenUp dans ton Chrome habituel.
+2. L'extension lit la page classement TenUp depuis cette session.
+3. Elle extrait les resultats detectables.
+4. Elle appelle l'API Railway `POST /tournois/import`.
+5. Elle peut relancer une verification automatiquement le 7 du mois si Chrome est ouvert.
 
-Le flux est le suivant :
+## Pre-requis
 
-1. Connexion manuelle locale a TenUp avec `npm run login:tenup`.
-2. Sauvegarde de la session dans `storageState.json`.
-3. Copie du contenu minifie de ce fichier dans un secret GitHub.
-4. Le 7 de chaque mois, GitHub Actions lance `npm run sync:tenup`.
-5. Le script ouvre la page TenUp avec la session, extrait les tournois detectables, puis appelle `POST /tournois/import`.
+- La PR doit etre mergee et l'API Railway redeployee pour exposer `POST /tournois/import`.
+- La variable Railway `ADMIN_API_KEY` doit etre configuree.
+- Chrome doit etre installe.
 
-## Secrets GitHub a creer
+## Installer l'extension
 
-Dans GitHub : `Settings` > `Secrets and variables` > `Actions` > `New repository secret`.
+1. Ouvre `chrome://extensions`.
+2. Active `Mode developpeur`.
+3. Clique `Charger l'extension non empaquetee`.
+4. Selectionne le dossier `extension` du repo.
+5. Epingle l'extension `TenUp App Sync` dans la barre Chrome.
 
-- `TENUP_PERSON_ID` : identifiant TenUp, par exemple `7146157482`.
-- `TENUP_CLASSEMENT_URL` : optionnel, par exemple `https://tenup.fft.fr/classement/7146157482/padel`.
-- `TENUP_API_URL` : URL Railway, par exemple `https://tenup-app-production.up.railway.app`.
-- `TENUP_ADMIN_API_KEY` : meme valeur que `ADMIN_API_KEY` cote Railway.
-- `TENUP_STORAGE_STATE_JSON` : contenu minifie de `storageState.json`.
+## Configurer
 
-Pour generer `TENUP_STORAGE_STATE_JSON` :
+Dans le popup de l'extension :
 
-```bash
-npm install
-npm run login:tenup
-node -e "const fs=require('fs'); console.log(JSON.stringify(JSON.parse(fs.readFileSync('storageState.json','utf8'))))"
-```
+- `API Railway` : `https://tenup-app-production.up.railway.app`
+- `Cle admin API` : meme valeur que `ADMIN_API_KEY` cote Railway
+- `ID TenUp` : `7146157482`
+- `URL classement` : `https://tenup.fft.fr/classement/7146157482/padel`
+- `Verifier automatiquement le 7 du mois` : actif si tu veux la verification mensuelle
 
-Si TenUp change son point d'entree de connexion, il est possible de forcer l'URL de login :
+Clique ensuite `Enregistrer`.
 
-```bash
-TENUP_LOGIN_URL="https://login.fft.fr/realms/connect/protocol/openid-connect/auth?..." npm run login:tenup
-```
+## Tester aujourd'hui
 
-La valeur affichee par la derniere commande est sensible : elle contient les cookies de session TenUp. Ne pas la committer.
+1. Ouvre TenUp dans Chrome normal.
+2. Connecte-toi.
+3. Va sur la page classement padel.
+4. Recharge la page pour que l'extension capture les donnees reseau.
+5. Clique sur l'extension.
+6. Clique `Synchroniser maintenant`.
 
-## Lancer manuellement
+Si l'import reussit, le popup affiche le nombre de tournois importes et ignores.
 
-Le workflow `Monthly TenUp sync` peut etre lance depuis l'onglet `Actions` avec `Run workflow`.
+## Synchro automatique le 7
 
-En local :
+L'extension programme une alarme locale le 7 du mois a 07:00, heure de ton Mac.
 
-```bash
-TENUP_PERSON_ID=7146157482 \
-TENUP_API_URL=https://tenup-app-production.up.railway.app \
-TENUP_ADMIN_API_KEY=... \
-npm run sync:tenup
-```
+Limites importantes :
 
-Pour verifier l'extraction sans modifier la base :
-
-```bash
-TENUP_SYNC_DRY_RUN=true TENUP_PERSON_ID=7146157482 npm run sync:tenup
-```
-
-## Diagnostic
-
-Le format exact des donnees TenUp peut changer. Si aucun tournoi n'est extrait, le script echoue et ecrit un resume dans `tenup-sync-output.json`.
-
-Pour capturer les payloads bruts localement :
-
-```bash
-TENUP_SYNC_DEBUG=true TENUP_SYNC_DRY_RUN=true TENUP_PERSON_ID=7146157482 npm run sync:tenup
-```
-
-Ne pas publier ce fichier s'il contient des donnees personnelles.
+- Chrome doit etre ouvert.
+- L'extension doit etre activee.
+- Si TenUp demande une reconnexion ou un captcha, l'extension ouvrira la page mais tu devras te reconnecter manuellement.
+- La synchro cloud 100% autonome n'est pas fiable tant que TenUp bloque les navigateurs automatises.
 
 ## API ajoutee
 
-- `POST /tournois/import` : importe une liste de tournois sans doublons, requiert admin.
+- `POST /tournois/import` : importe une liste de tournois sans doublons, requiert `x-api-key`.
 - `GET /sync/status` : retourne la derniere synchronisation connue.
 
 La route d'import accepte :
 
 ```json
 {
-  "source": "tenup",
+  "source": "tenup-extension",
   "tournois": [
     {
       "date": "2026-05-07",
@@ -95,6 +82,6 @@ La route d'import accepte :
 }
 ```
 
-## Limite connue
+## Diagnostic
 
-Le premier run authentifie peut necessiter un ajustement du mapping si TenUp renvoie les tournois avec des noms de champs differents. Dans ce cas, utiliser le mode diagnostic local, puis adapter `scripts/sync-tenup.js`.
+Si l'extension affiche `Aucun tournoi detecte`, recharge la page TenUp puis relance la synchro. Le format exact des donnees TenUp peut changer ; dans ce cas il faudra ajuster le mapping dans `extension/content.js`.
