@@ -1,6 +1,7 @@
 const form = document.getElementById("settings-form");
 const statusBox = document.getElementById("status");
 const syncButton = document.getElementById("sync-now");
+const testButton = document.getElementById("test-read");
 const openButton = document.getElementById("open-tenup");
 
 const fields = {
@@ -50,6 +51,30 @@ syncButton.addEventListener("click", async () => {
     `Synchronise : ${result.imported || 0} importes, ${result.skipped || 0} ignores.`,
     "success"
   );
+});
+
+testButton.addEventListener("click", async () => {
+  setBusy(true);
+  setStatus("Lecture TenUp en cours...", "muted");
+
+  const response = await sendMessage({ type: "TEST_READ" });
+
+  setBusy(false);
+  if (!response.ok) {
+    setStatus(response.error || "Lecture TenUp impossible", "error");
+    return;
+  }
+
+  const result = response.result || {};
+  const diagnostics = result.diagnostics || {};
+  const count = result.tournois?.length || 0;
+  const details = `captures ${diagnostics.capturedPayloads || 0}, lignes ${diagnostics.domRows || 0}`;
+
+  if (count > 0) {
+    setStatus(`Lecture OK : ${count} tournoi(s) detecte(s), ${details}.`, "success");
+  } else {
+    setStatus(`Lecture OK, mais aucun tournoi detecte (${details}). Recharge la page TenUp puis reessaie.`, "error");
+  }
 });
 
 openButton.addEventListener("click", async () => {
@@ -128,6 +153,7 @@ function sendMessage(message) {
 
 function setBusy(isBusy) {
   syncButton.disabled = isBusy;
+  testButton.disabled = isBusy;
   openButton.disabled = isBusy;
   form.querySelectorAll("button, input").forEach(element => {
     if (element.id !== "sync-now" && element.id !== "open-tenup") {
