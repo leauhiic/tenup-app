@@ -55,6 +55,21 @@ async function clickLoginButton(page) {
   return null;
 }
 
+async function waitForManualLogin(page) {
+  console.log("\nSi une verification humaine ou un captcha apparait, resous-le dans la fenetre.");
+  console.log("Clique ensuite sur Connexion/inscription, connecte-toi, puis attends le retour sur TenUp.\n");
+
+  await page.waitForURL(
+    url => /login\.fft\.fr|tenup\.fft\.fr\/api\/auth\/callback/.test(url.href),
+    { timeout: 0 }
+  ).catch(() => {});
+
+  await page.waitForURL(
+    url => url.hostname === "tenup.fft.fr" && !url.pathname.startsWith("/api/auth/callback"),
+    { timeout: 0 }
+  );
+}
+
 async function resolveLoginUrl(page) {
   if (TENUP_LOGIN_URL) {
     return withRedirectUri(TENUP_LOGIN_URL);
@@ -93,17 +108,20 @@ async function resolveLoginUrl(page) {
   } else {
     loginPage = await clickLoginButton(page);
     if (!loginPage) {
-      throw new Error("Impossible de trouver le bouton de connexion TenUp. Relance avec TENUP_LOGIN_URL.");
+      await waitForManualLogin(page);
+      loginPage = page;
     }
   }
 
-  console.log("\n⚠️ Connecte-toi MANUELLEMENT dans la fenêtre");
-  console.log("👉 Une fois connecté, reviens ici, j'attends...\n");
+  console.log("\n⚠️ Connecte-toi MANUELLEMENT dans la fenêtre si ce n'est pas deja fait");
+  console.log("👉 Une fois connecté, je sauvegarde la session automatiquement...\n");
 
   // On attend que tu sois redirigé vers TenUp ou domaine FFT
-  await loginPage.waitForURL("**tenup.fft.fr/**", {
-    timeout: 0,
-  });
+  if (!loginPage.url().includes("tenup.fft.fr")) {
+    await loginPage.waitForURL("**tenup.fft.fr/**", {
+      timeout: 0,
+    });
+  }
 
   console.log("✅ Login détecté sur TenUp !");
 
