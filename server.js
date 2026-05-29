@@ -242,6 +242,14 @@ app.post("/import-from-2026mai", requireAdmin, async (req, res) => {
   }
 });
 
-app.listen(PORT, HOST, () => {
-  console.log(`TenUp API listening on ${HOST}:${PORT}`);
-});
+function listen(port) {
+  app.listen(port, HOST, () => {
+    console.log(`TenUp API listening on ${HOST}:${port}`);
+  });
+}
+
+listen(PORT);
+
+if (String(PORT) !== "3000") {
+  listen(3000);
+}
