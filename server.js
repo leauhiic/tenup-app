@@ -171,12 +171,15 @@ async function insertTournoi(tournoi) {
 }
 
 async function insertTournoiIfMissing(tournoi) {
-  await getDb().query(
+  const result = await getDb().query(
     `INSERT INTO tournois (date, nom, categorie, partenaire, classement, point, validite)
      VALUES ($1, $2, $3, $4, $5, $6, $7)
-     ON CONFLICT DO NOTHING`,
+     ON CONFLICT DO NOTHING
+     RETURNING id`,
     [tournoi.date, tournoi.nom, tournoi.categorie, tournoi.partenaire, tournoi.classement, tournoi.point, tournoi.validite]
   );
+
+  return result.rowCount > 0;
 }
 
 app.get("/", (req, res) => {
@@ -369,8 +372,9 @@ app.post("/import-from-2026mai", requireAdmin, async (req, res) => {
         throw new Error(`Invalid seed row "${t.Nom}": ${validation.error}`);
       }
 
-      await insertTournoiIfMissing(validation.value);
-      imported += 1;
+      if (await insertTournoiIfMissing(validation.value)) {
+        imported += 1;
+      }
     }
 
     res.json({ message: "Import reussi", imported, replaced: replace });
@@ -378,6 +382,14 @@ app.post("/import-from-2026mai", requireAdmin, async (req, res) => {
     console.error(err);
     res.status(500).json({ error: err.message });
   }
+});
+
+require("./sync-routes")(app, {
+  requireAdmin,
+  validateTournoiPayload,
+  insertTournoiIfMissing,
+  getDb,
+  cleanText
 });
 
 function listen(port) {

@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="fr">
+  <head>
+    <meta charset="utf-8">
+    <title>TenUp Sync</title>
+    <link rel="stylesheet" href="popup.css">
+  </head>
+  <body>
+    <main>
+      <header>
+        <div class="brand">TEN<span>UP</span></div>
+        <div class="subtitle">Sync extension</div>
+      </header>
+
+      <form id="settings-form">
+        <label>
+          API Railway
+          <input id="api-url" name="apiUrl" type="url" required>
+        </label>
+
+        <label>
+          Cle admin API
+          <input id="admin-api-key" name="adminApiKey" type="password" autocomplete="off" required>
+        </label>
+
+        <label>
+          ID TenUp
+          <input id="person-id" name="personId" inputmode="numeric" required>
+        </label>
+
+        <label>
+          URL classement
+          <input id="classement-url" name="classementUrl" type="url" required>
+        </label>
+
+        <label class="check">
+          <input id="auto-sync" name="autoSyncEnabled" type="checkbox">
+          <span>Verifier automatiquement le 7 du mois</span>
+        </label>
+
+        <div class="actions">
+          <button id="save" type="submit">Enregistrer</button>
+          <button id="open-tenup" type="button" class="secondary">Ouvrir TenUp</button>
+        </div>
+      </form>
+
+      <button id="test-read" type="button" class="secondary wide">Tester la lecture</button>
+      <button id="sync-now" type="button" class="primary">Synchroniser maintenant</button>
+
+      <section id="status" class="status muted">Chargement...</section>
+    </main>
+
+    <script src="popup.js"></script>
+  </body>
+</html>
