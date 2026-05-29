@@ -10,6 +10,12 @@ const allowedOrigins = (process.env.CORS_ORIGINS || "")
   .map(origin => origin.trim())
   .filter(Boolean);
 
+let db;
+function getDb() {
+  if (!db) db = require("./db");
+  return db;
+}
+
 app.use(cors({
   origin(origin, callback) {
     if (!origin || allowedOrigins.length === 0 || allowedOrigins.includes(origin)) {
@@ -22,9 +28,7 @@ app.use(cors({
 }));
 app.use(express.json());
 
-const db = require("./db");
 const seedData = require("./tournois-202605.json");
-
 const CATEGORIES = new Set(["DM", "DD", "DX"]);
 
 function requireAdmin(req, res, next) {
@@ -47,7 +51,6 @@ function requireAdmin(req, res, next) {
 
 function parseDateToISO(value) {
   if (typeof value !== "string") return null;
-
   if (/^\d{4}-\d{2}-\d{2}$/.test(value)) return value;
 
   const frMatch = value.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
@@ -86,47 +89,33 @@ function validateTournoiPayload(payload = {}) {
   if (!classement) return { error: "classement must be a positive integer" };
   if (!point) return { error: "point must be a positive integer" };
 
-  return {
-    value: { date, nom, categorie, partenaire, classement, point, validite }
-  };
+  return { value: { date, nom, categorie, partenaire, classement, point, validite } };
 }
 
 async function insertTournoi(tournoi) {
-  await db.query(
+  await getDb().query(
     `INSERT INTO tournois (date, nom, categorie, partenaire, classement, point, validite)
      VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-    [
-      tournoi.date,
-      tournoi.nom,
-      tournoi.categorie,
-      tournoi.partenaire,
-      tournoi.classement,
-      tournoi.point,
-      tournoi.validite
-    ]
+    [tournoi.date, tournoi.nom, tournoi.categorie, tournoi.partenaire, tournoi.classement, tournoi.point, tournoi.validite]
   );
 }
 
 async function insertTournoiIfMissing(tournoi) {
-  await db.query(
+  await getDb().query(
     `INSERT INTO tournois (date, nom, categorie, partenaire, classement, point, validite)
      VALUES ($1, $2, $3, $4, $5, $6, $7)
      ON CONFLICT DO NOTHING`,
-    [
-      tournoi.date,
-      tournoi.nom,
-      tournoi.categorie,
-      tournoi.partenaire,
-      tournoi.classement,
-      tournoi.point,
-      tournoi.validite
-    ]
+    [tournoi.date, tournoi.nom, tournoi.categorie, tournoi.partenaire, tournoi.classement, tournoi.point, tournoi.validite]
   );
 }
 
+app.get("/", (req, res) => {
+  res.json({ status: "ok", service: "tenup-api" });
+});
+
 app.post("/init-db", requireAdmin, async (req, res) => {
   try {
-    await db.query(`
+    await getDb().query(`
       CREATE TABLE IF NOT EXISTS tournois (
         id SERIAL PRIMARY KEY,
         date DATE NOT NULL,
@@ -138,7 +127,7 @@ app.post("/init-db", requireAdmin, async (req, res) => {
         validite TEXT
       )
     `);
-    await db.query(`
+    await getDb().query(`
       ALTER TABLE tournois
       ALTER COLUMN date TYPE DATE
       USING CASE
@@ -146,13 +135,13 @@ app.post("/init-db", requireAdmin, async (req, res) => {
         ELSE date::DATE
       END
     `);
-    await db.query("ALTER TABLE tournois ALTER COLUMN date SET NOT NULL");
-    await db.query("ALTER TABLE tournois ALTER COLUMN nom SET NOT NULL");
-    await db.query("ALTER TABLE tournois ALTER COLUMN categorie SET NOT NULL");
-    await db.query("ALTER TABLE tournois ALTER COLUMN partenaire SET NOT NULL");
-    await db.query("ALTER TABLE tournois ALTER COLUMN classement SET NOT NULL");
-    await db.query("ALTER TABLE tournois ALTER COLUMN point SET NOT NULL");
-    await db.query(`
+    await getDb().query("ALTER TABLE tournois ALTER COLUMN date SET NOT NULL");
+    await getDb().query("ALTER TABLE tournois ALTER COLUMN nom SET NOT NULL");
+    await getDb().query("ALTER TABLE tournois ALTER COLUMN categorie SET NOT NULL");
+    await getDb().query("ALTER TABLE tournois ALTER COLUMN partenaire SET NOT NULL");
+    await getDb().query("ALTER TABLE tournois ALTER COLUMN classement SET NOT NULL");
+    await getDb().query("ALTER TABLE tournois ALTER COLUMN point SET NOT NULL");
+    await getDb().query(`
       CREATE UNIQUE INDEX IF NOT EXISTS tournois_identity_idx
       ON tournois (date, nom, categorie, partenaire, classement, point)
     `);
@@ -164,16 +153,18 @@ app.post("/init-db", requireAdmin, async (req, res) => {
   }
 });
 
-app.get("/", (req, res) => {
-  res.json({ status: "ok", service: "tenup-api" });
-});
-
 app.get("/tournois", async (req, res) => {
   try {
-    const result = await db.query(`
+    const result = await getDb().query(`
       SELECT
         id,
-        TO_CHAR(date, 'DD/MM/YYYY') AS date,
+        TO_CHAR(
+          CASE
+            WHEN date::TEXT ~ '^\d{2}/\d{2}/\d{4}$' THEN to_date(date::TEXT, 'DD/MM/YYYY')
+            ELSE date::DATE
+          END,
+          'DD/MM/YYYY'
+        ) AS date,
         nom,
         categorie,
         partenaire,
@@ -181,7 +172,12 @@ app.get("/tournois", async (req, res) => {
         point,
         validite
       FROM tournois
-      ORDER BY date DESC, point DESC
+      ORDER BY
+        CASE
+          WHEN date::TEXT ~ '^\d{2}/\d{2}/\d{4}$' THEN to_date(date::TEXT, 'DD/MM/YYYY')
+          ELSE date::DATE
+        END DESC,
+        point DESC
     `);
 
     res.json(result.rows);
@@ -210,7 +206,7 @@ app.post("/import-from-2026mai", requireAdmin, async (req, res) => {
     const replace = req.query.replace === "true";
 
     if (replace) {
-      await db.query("TRUNCATE TABLE tournois RESTART IDENTITY");
+      await getDb().query("TRUNCATE TABLE tournois RESTART IDENTITY");
     }
 
     let imported = 0;
