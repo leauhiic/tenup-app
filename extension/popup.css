@@ -118,6 +118,11 @@ button[type="submit"] {
   margin-top: 12px;
 }
 
+.wide {
+  width: 100%;
+  margin-top: 12px;
+}
+
 .secondary {
   color: #e8eaed;
   background: #252a33;
