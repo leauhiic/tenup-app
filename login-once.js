@@ -1,8 +1,29 @@
 const { chromium } = require("playwright");
+const fs = require("fs");
 
 const STATE_PATH = process.env.TENUP_STORAGE_STATE_PATH || "./storageState.json";
 const TENUP_HOME_URL = process.env.TENUP_HOME_URL || "https://tenup.fft.fr/";
 const TENUP_LOGIN_URL = process.env.TENUP_LOGIN_URL || "";
+const PLAYWRIGHT_CHANNEL = process.env.PLAYWRIGHT_CHANNEL || "";
+const CHROME_EXECUTABLE = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
+
+function getLaunchOptions() {
+  const options = {
+    headless: false,
+    slowMo: 50,
+  };
+
+  if (PLAYWRIGHT_CHANNEL) {
+    options.channel = PLAYWRIGHT_CHANNEL;
+    return options;
+  }
+
+  if (fs.existsSync(CHROME_EXECUTABLE)) {
+    options.executablePath = CHROME_EXECUTABLE;
+  }
+
+  return options;
+}
 
 function withRedirectUri(loginUrl) {
   const separator = loginUrl.includes("?") ? "&" : "?";
@@ -88,10 +109,7 @@ async function resolveLoginUrl(page) {
 }
 
 (async () => {
-  const browser = await chromium.launch({
-    headless: false, // 👈 IMPORTANT : tu vois le login
-    slowMo: 50,
-  });
+  const browser = await chromium.launch(getLaunchOptions());
 
   const context = await browser.newContext();
   const page = await context.newPage();
