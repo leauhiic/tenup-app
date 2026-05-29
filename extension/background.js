@@ -46,6 +46,13 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return true;
   }
 
+  if (message?.type === "TEST_READ") {
+    collectFromTenUp({ active: true })
+      .then(result => sendResponse({ ok: true, result }))
+      .catch(err => sendResponse({ ok: false, error: err.message }));
+    return true;
+  }
+
   if (message?.type === "OPEN_TENUP") {
     getSettings()
       .then(settings => openOrFindTenUpTab(settings, { active: true }))
@@ -130,17 +137,7 @@ function createAlarm(name, info) {
 async function runSync({ automatic }) {
   const settings = await getSettings();
   validateSettings(settings);
-
-  const tab = await openOrFindTenUpTab(settings, { active: !automatic });
-  await waitForTabReady(tab.id);
-  const collection = await sendTabMessage(tab.id, {
-    type: "COLLECT_TENUP",
-    personId: settings.personId
-  });
-
-  if (!collection?.ok) {
-    throw new Error(collection?.error || "Impossible de lire la page TenUp");
-  }
+  const collection = await collectFromTenUp({ active: !automatic, settings });
 
   if (!collection.tournois?.length) {
     const lastRun = await recordLastRun({
@@ -167,9 +164,31 @@ async function runSync({ automatic }) {
   return { ...imported, lastRun };
 }
 
+async function collectFromTenUp({ active, settings }) {
+  const currentSettings = settings || await getSettings();
+  validateReadSettings(currentSettings);
+
+  const tab = await openOrFindTenUpTab(currentSettings, { active });
+  await waitForTabReady(tab.id);
+  const collection = await sendTabMessage(tab.id, {
+    type: "COLLECT_TENUP",
+    personId: currentSettings.personId
+  });
+
+  if (!collection?.ok) {
+    throw new Error(collection?.error || "Impossible de lire la page TenUp");
+  }
+
+  return collection;
+}
+
 function validateSettings(settings) {
+  validateReadSettings(settings);
   if (!settings.apiUrl) throw new Error("URL API manquante");
   if (!settings.adminApiKey) throw new Error("Cle admin API manquante");
+}
+
+function validateReadSettings(settings) {
   if (!settings.personId) throw new Error("Identifiant TenUp manquant");
   if (!settings.classementUrl) throw new Error("URL classement TenUp manquante");
 }
