@@ -1,7 +1,29 @@
 const { chromium } = require("playwright");
-const fs = require("fs");
 
-const STATE_PATH = "./storageState.json";
+const STATE_PATH = process.env.TENUP_STORAGE_STATE_PATH || "./storageState.json";
+const TENUP_HOME_URL = process.env.TENUP_HOME_URL || "https://tenup.fft.fr/";
+const TENUP_LOGIN_URL = process.env.TENUP_LOGIN_URL || "";
+
+async function resolveLoginUrl(page) {
+  if (TENUP_LOGIN_URL) {
+    return TENUP_LOGIN_URL;
+  }
+
+  await page.goto(TENUP_HOME_URL, {
+    waitUntil: "domcontentloaded",
+  });
+
+  return page.evaluate(async () => {
+    const response = await fetch("/login", { credentials: "include" });
+    if (!response.ok) {
+      throw new Error(`TenUp login endpoint failed with ${response.status}`);
+    }
+
+    const loginUrl = await response.json();
+    const separator = loginUrl.includes("?") ? "&" : "?";
+    return `${loginUrl}${separator}redirect_uri=${window.location.origin}/api/auth/callback`;
+  });
+}
 
 (async () => {
   const browser = await chromium.launch({
@@ -12,9 +34,10 @@ const STATE_PATH = "./storageState.json";
   const context = await browser.newContext();
   const page = await context.newPage();
 
-  console.log("👉 Ouvre login FFT...");
+  console.log("👉 Preparation du login TenUp/FFT...");
 
-  await page.goto("https://login.fft.fr/", {
+  const loginUrl = await resolveLoginUrl(page);
+  await page.goto(loginUrl, {
     waitUntil: "domcontentloaded",
   });
 
