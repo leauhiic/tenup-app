@@ -45,6 +45,8 @@ Routes :
 - `PUT /tournois/:id` : modifie un tournoi, requiert admin.
 - `DELETE /tournois/:id` : supprime un tournoi, requiert admin.
 - `POST /init-db` : cree/migre la table, requiert admin.
+- `POST /tournois/import` : importe une liste de tournois sans doublons, requiert admin.
+- `GET /sync/status` : retourne la derniere synchronisation connue.
 - `POST /import-from-2026mai` : importe `tournois-202605.json` sans dupliquer les lignes deja presentes, requiert admin.
 - `POST /import-from-2026mai?replace=true` : vide la table puis importe le seed.
 
@@ -85,3 +87,4 @@ npm test -- --watchAll=false
 - Les dates sont normalisees cote API et stockees comme `DATE`.
 - Le backend refuse les categories hors `DM`, `DD`, `DX`.
 - Le Dockerfile installe seulement les dependances runtime de l'API. Le script Playwright `login-once.js` reste disponible en local via `npm run login:tenup`.
+- La synchro TenUp mensuelle est documentee dans `docs/tenup-sync.md`.
