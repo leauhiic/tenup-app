@@ -5,6 +5,7 @@
   "description": "Synchronise les resultats TenUp vers le dashboard TenUp App.",
   "permissions": [
     "alarms",
+    "scripting",
     "storage",
     "tabs"
   ],
