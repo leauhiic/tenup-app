@@ -1,4 +1,3 @@
-import { addMonths, startOfMonth, endOfMonth } from "date-fns";
 import BAREME from "./bareme.json";
 
 export const TRANCHES = {
@@ -14,6 +13,18 @@ export const TRANCHES = {
 
 export const CATEGORIES = ["DM", "DD", "DX"];
 export const TYPES = ["P25", "P50", "P100", "P250", "P500", "P1000", "P1500", "P2000"];
+
+function addMonths(date, amount) {
+  return new Date(date.getFullYear(), date.getMonth() + amount, date.getDate());
+}
+
+function startOfMonth(date) {
+  return new Date(date.getFullYear(), date.getMonth(), 1);
+}
+
+function endOfMonth(date) {
+  return new Date(date.getFullYear(), date.getMonth() + 1, 0);
+}
 
 export function getPoints(type, tranche, place) {
   const table = BAREME[type]?.[tranche];
@@ -65,6 +76,46 @@ export function normalizeTournois(tournois) {
     dateObj: parseDate(t.date),
     point: Number(t.point || 0),
   }));
+}
+
+export function getDashboardBuckets(tournois, now = new Date()) {
+  const currentMonth = now.getMonth();
+  const currentYear = now.getFullYear();
+  const today = new Date(currentYear, currentMonth, now.getDate());
+  const startWindow = new Date(currentYear, currentMonth - 11, 1);
+
+  const dated = tournois.map(t => ({ tournoi: t, date: parseDate(t.date) }));
+  const completed = dated.filter(({ date }) => date <= today);
+  const actifs = completed
+    .filter(({ date }) => date >= startWindow)
+    .map(({ tournoi }) => tournoi);
+
+  const tournoisMoisCourant = completed
+    .filter(({ date }) => date.getFullYear() === currentYear && date.getMonth() === currentMonth)
+    .map(({ tournoi }) => tournoi);
+
+  const actifsClassement = actifs.filter(t => !tournoisMoisCourant.includes(t));
+
+  const tournoisExpirants = completed
+    .filter(({ date }) => date.getMonth() === currentMonth && date.getFullYear() === currentYear - 1)
+    .map(({ tournoi }) => tournoi);
+
+  const historique = completed
+    .filter(({ date, tournoi }) => date < startWindow && !tournoisExpirants.includes(tournoi))
+    .map(({ tournoi }) => tournoi);
+
+  const tournoisAVenir = dated
+    .filter(({ date }) => date > today)
+    .map(({ tournoi }) => tournoi);
+
+  return {
+    actifs,
+    actifsClassement,
+    tournoisMoisCourant,
+    tournoisExpirants,
+    historique,
+    tournoisAVenir,
+  };
 }
 
 export function getTop12(tournois) {
