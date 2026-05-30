@@ -134,12 +134,19 @@ function parsePositiveInteger(value) {
   return number;
 }
 
+function parseBoolean(value, defaultValue = false) {
+  if (value === true || value === false) return value;
+  if (value === "true") return true;
+  if (value === "false") return false;
+  return defaultValue;
+}
+
 function cleanText(value, maxLength = 160) {
   if (typeof value !== "string") return "";
   return value.trim().slice(0, maxLength);
 }
 
-function validateTournoiPayload(payload = {}) {
+function validateTournoiPayload(payload = {}, options = {}) {
   const date = parseDateToISO(payload.date);
   const nom = cleanText(payload.nom);
   const categorie = cleanText(payload.categorie, 2).toUpperCase();
@@ -147,6 +154,7 @@ function validateTournoiPayload(payload = {}) {
   const classement = parsePositiveInteger(payload.classement);
   const point = parsePositiveInteger(payload.point);
   const validite = cleanText(payload.validite, 20);
+  const manuel = parseBoolean(payload.manuel, options.defaultManuel === true);
 
   if (!date) return { error: "date must be YYYY-MM-DD or DD/MM/YYYY" };
   if (!nom) return { error: "nom is required" };
@@ -155,7 +163,7 @@ function validateTournoiPayload(payload = {}) {
   if (!classement) return { error: "classement must be a positive integer" };
   if (!point) return { error: "point must be a positive integer" };
 
-  return { value: { date, nom, categorie, partenaire, classement, point, validite } };
+  return { value: { date, nom, categorie, partenaire, classement, point, validite, manuel } };
 }
 
 function parseId(value) {
@@ -165,22 +173,157 @@ function parseId(value) {
 
 async function insertTournoi(tournoi) {
   await getDb().query(
-    `INSERT INTO tournois (date, nom, categorie, partenaire, classement, point, validite)
-     VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-    [tournoi.date, tournoi.nom, tournoi.categorie, tournoi.partenaire, tournoi.classement, tournoi.point, tournoi.validite]
+    `INSERT INTO tournois (date, nom, categorie, partenaire, classement, point, validite, manuel)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+    [tournoi.date, tournoi.nom, tournoi.categorie, tournoi.partenaire, tournoi.classement, tournoi.point, tournoi.validite, tournoi.manuel === true]
   );
 }
 
-async function insertTournoiIfMissing(tournoi) {
+function normalizeMatchText(value) {
+  return String(value || "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-zA-Z0-9]+/g, " ")
+    .trim()
+    .toLowerCase();
+}
+
+function namesLikelyMatch(left, right) {
+  const a = normalizeMatchText(left);
+  const b = normalizeMatchText(right);
+  if (!a || !b) return false;
+  if (a === b || a.includes(b) || b.includes(a)) return true;
+
+  const leftType = a.match(/\bp\d+\b/)?.[0];
+  const rightType = b.match(/\bp\d+\b/)?.[0];
+  return Boolean(leftType && rightType && leftType === rightType);
+}
+
+async function findExactTournoi(tournoi) {
   const result = await getDb().query(
-    `INSERT INTO tournois (date, nom, categorie, partenaire, classement, point, validite)
-     VALUES ($1, $2, $3, $4, $5, $6, $7)
-     ON CONFLICT DO NOTHING
-     RETURNING id`,
-    [tournoi.date, tournoi.nom, tournoi.categorie, tournoi.partenaire, tournoi.classement, tournoi.point, tournoi.validite]
+    `SELECT id, manuel
+     FROM tournois
+     WHERE date = $1::date
+       AND nom = $2
+       AND categorie = $3
+       AND LOWER(partenaire) = LOWER($4)
+       AND classement = $5
+       AND point = $6
+     ORDER BY manuel DESC, id ASC
+     LIMIT 1`,
+    [tournoi.date, tournoi.nom, tournoi.categorie, tournoi.partenaire, tournoi.classement, tournoi.point]
   );
 
-  return result.rowCount > 0;
+  return result.rows[0] || null;
+}
+
+async function findManualTournoiMatch(tournoi) {
+  const result = await getDb().query(
+    `SELECT id, nom
+     FROM tournois
+     WHERE manuel = true
+       AND date = $1::date
+       AND categorie = $2
+       AND LOWER(partenaire) = LOWER($3)
+     ORDER BY id ASC`,
+    [tournoi.date, tournoi.categorie, tournoi.partenaire]
+  );
+
+  if (result.rows.length === 1) return result.rows[0];
+  return result.rows.find(row => namesLikelyMatch(row.nom, tournoi.nom)) || null;
+}
+
+async function updateTournoiFromImport(id, tournoi) {
+  await getDb().query(
+    `UPDATE tournois
+     SET date = $1,
+         nom = $2,
+         categorie = $3,
+         partenaire = $4,
+         classement = $5,
+         point = $6,
+         validite = $7,
+         manuel = false
+     WHERE id = $8`,
+    [tournoi.date, tournoi.nom, tournoi.categorie, tournoi.partenaire, tournoi.classement, tournoi.point, tournoi.validite, id]
+  );
+}
+
+async function deleteTournoiById(id) {
+  await getDb().query("DELETE FROM tournois WHERE id = $1", [id]);
+}
+
+async function insertTournoiIfMissing(tournoi, options = {}) {
+  const imported = options.imported === true;
+  const row = {
+    ...tournoi,
+    manuel: imported ? false : tournoi.manuel === true
+  };
+
+  const existing = await findExactTournoi(row);
+
+  if (imported) {
+    const manualMatch = await findManualTournoiMatch(row);
+    if (manualMatch) {
+      if (existing && existing.id !== manualMatch.id) {
+        await deleteTournoiById(manualMatch.id);
+        return "updated";
+      }
+
+      await updateTournoiFromImport(manualMatch.id, row);
+      return "updated";
+    }
+  }
+
+  if (existing) return "skipped";
+
+  const result = await getDb().query(
+    `INSERT INTO tournois (date, nom, categorie, partenaire, classement, point, validite, manuel)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+     ON CONFLICT DO NOTHING
+     RETURNING id`,
+    [row.date, row.nom, row.categorie, row.partenaire, row.classement, row.point, row.validite, row.manuel]
+  );
+
+  return result.rowCount > 0 ? "inserted" : "skipped";
+}
+
+async function ensureTournoisSchema() {
+  await getDb().query(`
+    CREATE TABLE IF NOT EXISTS tournois (
+      id SERIAL PRIMARY KEY,
+      date DATE NOT NULL,
+      nom TEXT NOT NULL,
+      categorie TEXT NOT NULL CHECK (categorie IN ('DM', 'DD', 'DX')),
+      partenaire TEXT NOT NULL,
+      classement INTEGER NOT NULL CHECK (classement > 0),
+      point INTEGER NOT NULL CHECK (point > 0),
+      validite TEXT,
+      manuel BOOLEAN NOT NULL DEFAULT false
+    )
+  `);
+  await getDb().query(`
+    ALTER TABLE tournois
+    ALTER COLUMN date TYPE DATE
+    USING CASE
+      WHEN date::TEXT ~ '^[0-9]{2}/[0-9]{2}/[0-9]{4}$' THEN to_date(date::TEXT, 'DD/MM/YYYY')
+      ELSE date::DATE
+    END
+  `);
+  await getDb().query("ALTER TABLE tournois ADD COLUMN IF NOT EXISTS manuel BOOLEAN");
+  await getDb().query("UPDATE tournois SET manuel = false WHERE manuel IS NULL");
+  await getDb().query("ALTER TABLE tournois ALTER COLUMN manuel SET DEFAULT false");
+  await getDb().query("ALTER TABLE tournois ALTER COLUMN manuel SET NOT NULL");
+  await getDb().query("ALTER TABLE tournois ALTER COLUMN date SET NOT NULL");
+  await getDb().query("ALTER TABLE tournois ALTER COLUMN nom SET NOT NULL");
+  await getDb().query("ALTER TABLE tournois ALTER COLUMN categorie SET NOT NULL");
+  await getDb().query("ALTER TABLE tournois ALTER COLUMN partenaire SET NOT NULL");
+  await getDb().query("ALTER TABLE tournois ALTER COLUMN classement SET NOT NULL");
+  await getDb().query("ALTER TABLE tournois ALTER COLUMN point SET NOT NULL");
+  await getDb().query(`
+    CREATE INDEX IF NOT EXISTS tournois_lookup_idx
+    ON tournois (date, categorie, partenaire, classement, point)
+  `);
 }
 
 app.get("/", (req, res) => {
@@ -214,37 +357,7 @@ app.get("/auth/me", requireAdmin, (req, res) => {
 
 app.post("/init-db", requireAdmin, async (req, res) => {
   try {
-    await getDb().query(`
-      CREATE TABLE IF NOT EXISTS tournois (
-        id SERIAL PRIMARY KEY,
-        date DATE NOT NULL,
-        nom TEXT NOT NULL,
-        categorie TEXT NOT NULL CHECK (categorie IN ('DM', 'DD', 'DX')),
-        partenaire TEXT NOT NULL,
-        classement INTEGER NOT NULL CHECK (classement > 0),
-        point INTEGER NOT NULL CHECK (point > 0),
-        validite TEXT
-      )
-    `);
-    await getDb().query(`
-      ALTER TABLE tournois
-      ALTER COLUMN date TYPE DATE
-      USING CASE
-        WHEN date::TEXT ~ '^[0-9]{2}/[0-9]{2}/[0-9]{4}$' THEN to_date(date::TEXT, 'DD/MM/YYYY')
-        ELSE date::DATE
-      END
-    `);
-    await getDb().query("ALTER TABLE tournois ALTER COLUMN date SET NOT NULL");
-    await getDb().query("ALTER TABLE tournois ALTER COLUMN nom SET NOT NULL");
-    await getDb().query("ALTER TABLE tournois ALTER COLUMN categorie SET NOT NULL");
-    await getDb().query("ALTER TABLE tournois ALTER COLUMN partenaire SET NOT NULL");
-    await getDb().query("ALTER TABLE tournois ALTER COLUMN classement SET NOT NULL");
-    await getDb().query("ALTER TABLE tournois ALTER COLUMN point SET NOT NULL");
-    await getDb().query(`
-      CREATE UNIQUE INDEX IF NOT EXISTS tournois_identity_idx
-      ON tournois (date, nom, categorie, partenaire, classement, point)
-    `);
-
+    await ensureTournoisSchema();
     res.json({ message: "Table tournois ready" });
   } catch (err) {
     console.error(err);
@@ -254,6 +367,7 @@ app.post("/init-db", requireAdmin, async (req, res) => {
 
 app.get("/tournois", async (req, res) => {
   try {
+    await ensureTournoisSchema();
     const result = await getDb().query(`
       SELECT
         id,
@@ -269,7 +383,8 @@ app.get("/tournois", async (req, res) => {
         partenaire,
         classement,
         point,
-        validite
+        validite,
+        manuel
       FROM tournois
       ORDER BY
         CASE
@@ -287,13 +402,18 @@ app.get("/tournois", async (req, res) => {
 });
 
 app.post("/tournois", requireAdmin, async (req, res) => {
-  const validation = validateTournoiPayload(req.body);
+  const validation = validateTournoiPayload(req.body, { defaultManuel: true });
   if (validation.error) {
     return res.status(400).json({ error: validation.error });
   }
 
   try {
-    await insertTournoi(validation.value);
+    await ensureTournoisSchema();
+    const result = await insertTournoiIfMissing(validation.value);
+    if (result === "skipped") {
+      return res.json({ message: "Tournoi deja existant", skipped: true });
+    }
+
     res.status(201).json({ message: "Tournoi ajoute" });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -312,12 +432,13 @@ app.put("/tournois/:id", requireAdmin, async (req, res) => {
   }
 
   try {
+    await ensureTournoisSchema();
     const t = validation.value;
     const result = await getDb().query(
       `UPDATE tournois
-       SET date = $1, nom = $2, categorie = $3, partenaire = $4, classement = $5, point = $6, validite = $7
-       WHERE id = $8`,
-      [t.date, t.nom, t.categorie, t.partenaire, t.classement, t.point, t.validite, id]
+       SET date = $1, nom = $2, categorie = $3, partenaire = $4, classement = $5, point = $6, validite = $7, manuel = $8
+       WHERE id = $9`,
+      [t.date, t.nom, t.categorie, t.partenaire, t.classement, t.point, t.validite, t.manuel, id]
     );
 
     if (result.rowCount === 0) {
@@ -373,7 +494,7 @@ app.post("/import-from-2026mai", requireAdmin, async (req, res) => {
         throw new Error(`Invalid seed row "${t.Nom}": ${validation.error}`);
       }
 
-      if (await insertTournoiIfMissing(validation.value)) {
+      if (await insertTournoiIfMissing(validation.value) === "inserted") {
         imported += 1;
       }
     }
@@ -389,6 +510,7 @@ require("./sync-routes")(app, {
   requireAdmin,
   validateTournoiPayload,
   insertTournoiIfMissing,
+  ensureTournoisSchema,
   getDb,
   cleanText
 });
