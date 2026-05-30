@@ -12,7 +12,16 @@ export const TRANCHES = {
 };
 
 export const CATEGORIES = ["DM", "DD", "DX"];
-export const TYPES = ["P25", "P50", "P100", "P250", "P500", "P1000", "P1500", "P2000"];
+export const TYPES = [
+  "P25",
+  "P50",
+  "P100",
+  "P250",
+  "P500",
+  "P1000",
+  "P1500",
+  "P2000",
+];
 
 function addMonths(date, amount) {
   return new Date(date.getFullYear(), date.getMonth() + amount, date.getDate());
@@ -41,8 +50,11 @@ export function getValidite(dateStr) {
   if (Number.isNaN(d.getTime())) return "";
 
   const future = new Date(d.getFullYear() + 1, d.getMonth(), 1);
-  return future.toLocaleDateString("fr-FR", { month: "short" }).toLowerCase()
-    + "-" + String(future.getFullYear()).slice(-2);
+  return (
+    future.toLocaleDateString("fr-FR", { month: "short" }).toLowerCase() +
+    "-" +
+    String(future.getFullYear()).slice(-2)
+  );
 }
 
 export function parseDate(value) {
@@ -71,7 +83,7 @@ export function getRollingWindow(month) {
 }
 
 export function normalizeTournois(tournois) {
-  return tournois.map(t => ({
+  return tournois.map((t) => ({
     ...t,
     dateObj: parseDate(t.date),
     point: Number(t.point || 0),
@@ -84,24 +96,36 @@ export function getDashboardBuckets(tournois, now = new Date()) {
   const today = new Date(currentYear, currentMonth, now.getDate());
   const startWindow = new Date(currentYear, currentMonth - 11, 1);
 
-  const dated = tournois.map(t => ({ tournoi: t, date: parseDate(t.date) }));
+  const dated = tournois.map((t) => ({ tournoi: t, date: parseDate(t.date) }));
   const completed = dated.filter(({ date }) => date <= today);
   const actifs = completed
     .filter(({ date }) => date >= startWindow)
     .map(({ tournoi }) => tournoi);
 
   const tournoisMoisCourant = completed
-    .filter(({ date }) => date.getFullYear() === currentYear && date.getMonth() === currentMonth)
+    .filter(
+      ({ date }) =>
+        date.getFullYear() === currentYear && date.getMonth() === currentMonth,
+    )
     .map(({ tournoi }) => tournoi);
 
-  const actifsClassement = actifs.filter(t => !tournoisMoisCourant.includes(t));
+  const actifsClassement = actifs.filter(
+    (t) => !tournoisMoisCourant.includes(t),
+  );
 
   const tournoisExpirants = completed
-    .filter(({ date }) => date.getMonth() === currentMonth && date.getFullYear() === currentYear - 1)
+    .filter(
+      ({ date }) =>
+        date.getMonth() === currentMonth &&
+        date.getFullYear() === currentYear - 1,
+    )
     .map(({ tournoi }) => tournoi);
 
   const historique = completed
-    .filter(({ date, tournoi }) => date < startWindow && !tournoisExpirants.includes(tournoi))
+    .filter(
+      ({ date, tournoi }) =>
+        date < startWindow && !tournoisExpirants.includes(tournoi),
+    )
     .map(({ tournoi }) => tournoi);
 
   const tournoisAVenir = dated
@@ -132,16 +156,18 @@ export function computeTop12Total(tournois) {
 }
 
 export function buildChartData(months, normalizedTournois, now) {
-  return months.map(month => {
+  return months.map((month) => {
     const { start, end } = getRollingWindow(month.date);
-    const pool = normalizedTournois.filter(t => t.dateObj >= start && t.dateObj <= end);
+    const pool = normalizedTournois.filter(
+      (t) => t.dateObj >= start && t.dateObj <= end,
+    );
     const total = computeTop12Total(pool);
-    const showProjected = month.date >= startOfMonth(addMonths(now, -1));
+    const showSimule = month.date >= startOfMonth(addMonths(now, 1));
 
     return {
       month: month.label,
       real: month.date <= now ? total : null,
-      projected: showProjected ? total : null,
+      simule: showSimule ? total : null,
     };
   });
 }

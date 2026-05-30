@@ -12,7 +12,9 @@ module.exports = function registerSyncRoutes(app, helpers) {
     insertTournoiIfMissing,
     ensureTournoisSchema,
     getDb,
-    cleanText
+    cleanText,
+    findUserByTenupId,
+    getDefaultAdminUser,
   } = helpers;
 
   async function ensureSyncRunsTable() {
@@ -43,8 +45,8 @@ module.exports = function registerSyncRoutes(app, helpers) {
         toInteger(run.imported),
         toInteger(run.skipped),
         cleanText(run.message || "", 500),
-        JSON.stringify(run.details || {})
-      ]
+        JSON.stringify(run.details || {}),
+      ],
     );
   }
 
@@ -68,8 +70,17 @@ module.exports = function registerSyncRoutes(app, helpers) {
   app.post("/tournois/import", requireAdmin, async (req, res) => {
     const body = req.body || {};
     const rows = Array.isArray(body) ? body : body.tournois;
-    const source = cleanText(body.source || DEFAULT_SOURCE, 60) || DEFAULT_SOURCE;
+    const source =
+      cleanText(body.source || DEFAULT_SOURCE, 60) || DEFAULT_SOURCE;
     const replace = req.query.replace === "true" || body.replace === true;
+    const tenupId = cleanText(
+      body.tenupId ||
+        body.tenup_id ||
+        req.query.tenupId ||
+        req.query.tenup_id ||
+        "",
+      32,
+    ).replace(/\s+/g, "");
 
     if (!Array.isArray(rows)) {
       return res.status(400).json({ error: "tournois must be an array" });
@@ -96,7 +107,7 @@ module.exports = function registerSyncRoutes(app, helpers) {
         imported: 0,
         skipped: rows.length,
         message: "Import rejected: invalid tournament rows",
-        details: { errors: errors.slice(0, 20) }
+        details: { errors: errors.slice(0, 20) },
       });
 
       return res.status(400).json({ error: "Invalid tournament rows", errors });
@@ -104,15 +115,41 @@ module.exports = function registerSyncRoutes(app, helpers) {
 
     try {
       await ensureTournoisSchema();
+      const owner = tenupId
+        ? await findUserByTenupId(tenupId)
+        : await getDefaultAdminUser();
+
+      if (!owner?.id) {
+        await recordSyncRun({
+          source,
+          status: "failed",
+          received: values.length,
+          imported: 0,
+          skipped: values.length,
+          message: tenupId
+            ? "Import rejected: unknown TenUp id"
+            : "Import rejected: admin account unavailable",
+          details: { tenupId },
+        });
+
+        return res.status(tenupId ? 404 : 500).json({
+          error: tenupId ? "TenUp id inconnu" : "Compte admin indisponible",
+        });
+      }
 
       if (replace) {
-        await getDb().query("TRUNCATE TABLE tournois RESTART IDENTITY");
+        await getDb().query("DELETE FROM tournois WHERE user_id = $1", [
+          owner.id,
+        ]);
       }
 
       let imported = 0;
       let updated = 0;
       for (const tournoi of values) {
-        const result = await insertTournoiIfMissing(tournoi, { imported: true });
+        const result = await insertTournoiIfMissing(tournoi, {
+          imported: true,
+          userId: owner.id,
+        });
         if (result === "inserted") {
           imported += 1;
         } else if (result === "updated") {
@@ -127,8 +164,15 @@ module.exports = function registerSyncRoutes(app, helpers) {
         received: values.length,
         imported,
         skipped,
-        message: replace ? "Import completed with replacement" : "Import completed",
-        details: { replace, updated }
+        message: replace
+          ? "Import completed with replacement"
+          : "Import completed",
+        details: {
+          replace,
+          updated,
+          tenupId: owner.tenupId || tenupId,
+          userId: owner.id,
+        },
       });
 
       res.json({
@@ -137,7 +181,7 @@ module.exports = function registerSyncRoutes(app, helpers) {
         imported,
         updated,
         skipped,
-        replaced: replace
+        replaced: replace,
       });
     } catch (err) {
       console.error(err);
@@ -147,7 +191,7 @@ module.exports = function registerSyncRoutes(app, helpers) {
         received: values.length,
         imported: 0,
         skipped: values.length,
-        message: err.message
+        message: err.message,
       });
       res.status(500).json({ error: err.message });
     }

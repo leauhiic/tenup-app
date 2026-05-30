@@ -8,13 +8,17 @@ const PORT = process.env.PORT || 3000;
 const HOST = "0.0.0.0";
 const ADMIN_API_KEY = process.env.ADMIN_API_KEY;
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || ADMIN_API_KEY;
-const ADMIN_TOKEN_SECRET = process.env.ADMIN_TOKEN_SECRET || ADMIN_API_KEY;
+const ADMIN_TOKEN_SECRET =
+  process.env.ADMIN_TOKEN_SECRET || ADMIN_API_KEY || ADMIN_PASSWORD;
+const DEFAULT_ADMIN_EMAIL = process.env.ADMIN_EMAIL || "admin@tenup.local";
+const DEFAULT_ADMIN_NAME = process.env.ADMIN_NAME || "Loic Vossier";
+const DEFAULT_ADMIN_TENUP_ID = process.env.ADMIN_TENUP_ID || "7146157482";
 const TOKEN_TTL_MS = 12 * 60 * 60 * 1000;
 const PASSWORD_KEYLEN = 32;
 const PASSWORD_ITERATIONS = 120000;
 const allowedOrigins = (process.env.CORS_ORIGINS || "")
   .split(",")
-  .map(origin => origin.trim())
+  .map((origin) => origin.trim())
   .filter(Boolean);
 
 let db;
@@ -29,23 +33,26 @@ function isAllowedOrigin(origin) {
 
   try {
     const { hostname, protocol } = new URL(origin);
-    if (protocol === "chrome-extension:" || protocol === "moz-extension:") return true;
+    if (protocol === "chrome-extension:" || protocol === "moz-extension:")
+      return true;
     return hostname === "localhost" || hostname.endsWith(".vercel.app");
   } catch (err) {
     return false;
   }
 }
 
-app.use(cors({
-  origin(origin, callback) {
-    if (isAllowedOrigin(origin)) {
-      callback(null, true);
-      return;
-    }
+app.use(
+  cors({
+    origin(origin, callback) {
+      if (isAllowedOrigin(origin)) {
+        callback(null, true);
+        return;
+      }
 
-    callback(new Error("Origin not allowed by CORS"));
-  }
-}));
+      callback(new Error("Origin not allowed by CORS"));
+    },
+  }),
+);
 app.use(express.json());
 
 const seedData = require("./tournois-202605.json");
@@ -72,7 +79,7 @@ function safeCompare(a, b) {
 function createAdminToken() {
   const payload = {
     role: "admin",
-    exp: Date.now() + TOKEN_TTL_MS
+    exp: Date.now() + TOKEN_TTL_MS,
   };
   const body = base64url(JSON.stringify(payload));
   return `${body}.${signTokenBody(body)}`;
@@ -80,11 +87,13 @@ function createAdminToken() {
 
 function createUserToken(user) {
   const payload = {
-    role: "user",
+    role: user.role || "user",
     userId: user.id,
     email: user.email,
     name: user.name || "",
-    exp: Date.now() + TOKEN_TTL_MS
+    tenupId: user.tenupId || user.tenup_id || "",
+    approved: user.approved === true,
+    exp: Date.now() + TOKEN_TTL_MS,
   };
   const body = base64url(JSON.stringify(payload));
   return `${body}.${signTokenBody(body)}`;
@@ -137,8 +146,18 @@ function requireAdmin(req, res, next) {
 
 function getOptionalUser(req) {
   const payload = verifyToken(getBearerToken(req));
-  return payload && payload.role === "user"
-    ? { id: payload.userId, email: payload.email, name: payload.name || "" }
+  return payload &&
+    ["user", "admin"].includes(payload.role) &&
+    payload.userId &&
+    payload.approved === true
+    ? {
+        id: payload.userId,
+        email: payload.email,
+        name: payload.name || "",
+        role: payload.role,
+        tenupId: payload.tenupId || "",
+        approved: true,
+      }
     : null;
 }
 
@@ -151,6 +170,17 @@ function requireUser(req, res, next) {
 
   req.user = user;
   next();
+}
+
+function requireAdminUser(req, res, next) {
+  requireUser(req, res, () => {
+    if (req.user.role !== "admin") {
+      res.status(403).json({ error: "Admin required" });
+      return;
+    }
+
+    next();
+  });
 }
 
 function parseDateToISO(value) {
@@ -188,10 +218,18 @@ function cleanEmail(value) {
   return cleanText(value, 254).toLowerCase();
 }
 
-function validateUserPayload(payload = {}, { requireName = false } = {}) {
+function cleanTenupId(value) {
+  return cleanText(value, 32).replace(/\s+/g, "");
+}
+
+function validateUserPayload(
+  payload = {},
+  { requireName = false, requireTenupId = false } = {},
+) {
   const email = cleanEmail(payload.email);
   const password = typeof payload.password === "string" ? payload.password : "";
   const name = cleanText(payload.name, 80);
+  const tenupId = cleanTenupId(payload.tenupId || payload.tenup_id);
 
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
     return { error: "email is invalid" };
@@ -202,11 +240,20 @@ function validateUserPayload(payload = {}, { requireName = false } = {}) {
   if (requireName && !name) {
     return { error: "name is required" };
   }
+  if (requireTenupId && !tenupId) {
+    return { error: "tenup id is required" };
+  }
+  if (tenupId && !/^\d{6,20}$/.test(tenupId)) {
+    return { error: "tenup id is invalid" };
+  }
 
-  return { value: { email, password, name } };
+  return { value: { email, password, name, tenupId } };
 }
 
-function hashPassword(password, salt = crypto.randomBytes(16).toString("base64url")) {
+function hashPassword(
+  password,
+  salt = crypto.randomBytes(16).toString("base64url"),
+) {
   const hash = crypto
     .pbkdf2Sync(password, salt, PASSWORD_ITERATIONS, PASSWORD_KEYLEN, "sha256")
     .toString("base64url");
@@ -230,12 +277,24 @@ function validateTournoiPayload(payload = {}, options = {}) {
 
   if (!date) return { error: "date must be YYYY-MM-DD or DD/MM/YYYY" };
   if (!nom) return { error: "nom is required" };
-  if (!CATEGORIES.has(categorie)) return { error: "categorie must be DM, DD or DX" };
+  if (!CATEGORIES.has(categorie))
+    return { error: "categorie must be DM, DD or DX" };
   if (!partenaire) return { error: "partenaire is required" };
   if (!classement) return { error: "classement must be a positive integer" };
   if (!point) return { error: "point must be a positive integer" };
 
-  return { value: { date, nom, categorie, partenaire, classement, point, validite, manuel } };
+  return {
+    value: {
+      date,
+      nom,
+      categorie,
+      partenaire,
+      classement,
+      point,
+      validite,
+      manuel,
+    },
+  };
 }
 
 function parseId(value) {
@@ -247,7 +306,17 @@ async function insertTournoi(tournoi) {
   await getDb().query(
     `INSERT INTO tournois (date, nom, categorie, partenaire, classement, point, validite, manuel, user_id)
      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
-    [tournoi.date, tournoi.nom, tournoi.categorie, tournoi.partenaire, tournoi.classement, tournoi.point, tournoi.validite, tournoi.manuel === true, tournoi.userId || null]
+    [
+      tournoi.date,
+      tournoi.nom,
+      tournoi.categorie,
+      tournoi.partenaire,
+      tournoi.classement,
+      tournoi.point,
+      tournoi.validite,
+      tournoi.manuel === true,
+      tournoi.userId || null,
+    ],
   );
 }
 
@@ -280,20 +349,28 @@ async function findExactTournoi(tournoi, userId = null) {
        AND categorie = $3
        AND LOWER(partenaire) = LOWER($4)
        AND classement = $5
-       AND point = $6
-       AND (
-         ($7::integer IS NULL AND user_id IS NULL)
-         OR ($7::integer IS NOT NULL AND (user_id = $7::integer OR user_id IS NULL))
-       )
+         AND point = $6
+         AND (
+           ($7::integer IS NULL AND user_id IS NULL)
+           OR ($7::integer IS NOT NULL AND user_id = $7::integer)
+         )
      ORDER BY manuel DESC, id ASC
      LIMIT 1`,
-    [tournoi.date, tournoi.nom, tournoi.categorie, tournoi.partenaire, tournoi.classement, tournoi.point, userId]
+    [
+      tournoi.date,
+      tournoi.nom,
+      tournoi.categorie,
+      tournoi.partenaire,
+      tournoi.classement,
+      tournoi.point,
+      userId,
+    ],
   );
 
   return result.rows[0] || null;
 }
 
-async function findManualTournoiMatch(tournoi) {
+async function findManualTournoiMatch(tournoi, userId = null) {
   const result = await getDb().query(
     `SELECT id, nom
      FROM tournois
@@ -301,12 +378,18 @@ async function findManualTournoiMatch(tournoi) {
        AND date = $1::date
        AND categorie = $2
        AND LOWER(partenaire) = LOWER($3)
+       AND (
+         ($4::integer IS NULL AND user_id IS NULL)
+         OR ($4::integer IS NOT NULL AND user_id = $4::integer)
+       )
      ORDER BY id ASC`,
-    [tournoi.date, tournoi.categorie, tournoi.partenaire]
+    [tournoi.date, tournoi.categorie, tournoi.partenaire, userId],
   );
 
   if (result.rows.length === 1) return result.rows[0];
-  return result.rows.find(row => namesLikelyMatch(row.nom, tournoi.nom)) || null;
+  return (
+    result.rows.find((row) => namesLikelyMatch(row.nom, tournoi.nom)) || null
+  );
 }
 
 async function updateTournoiFromImport(id, tournoi) {
@@ -321,7 +404,16 @@ async function updateTournoiFromImport(id, tournoi) {
          validite = $7,
          manuel = false
      WHERE id = $8`,
-    [tournoi.date, tournoi.nom, tournoi.categorie, tournoi.partenaire, tournoi.classement, tournoi.point, tournoi.validite, id]
+    [
+      tournoi.date,
+      tournoi.nom,
+      tournoi.categorie,
+      tournoi.partenaire,
+      tournoi.classement,
+      tournoi.point,
+      tournoi.validite,
+      id,
+    ],
   );
 }
 
@@ -334,13 +426,13 @@ async function insertTournoiIfMissing(tournoi, options = {}) {
   const userId = options.userId || null;
   const row = {
     ...tournoi,
-    manuel: imported ? false : tournoi.manuel === true
+    manuel: imported ? false : tournoi.manuel === true,
   };
 
   const existing = await findExactTournoi(row, userId);
 
   if (imported) {
-    const manualMatch = await findManualTournoiMatch(row);
+    const manualMatch = await findManualTournoiMatch(row, userId);
     if (manualMatch) {
       if (existing && existing.id !== manualMatch.id) {
         await deleteTournoiById(manualMatch.id);
@@ -359,7 +451,17 @@ async function insertTournoiIfMissing(tournoi, options = {}) {
      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
      ON CONFLICT DO NOTHING
      RETURNING id`,
-    [row.date, row.nom, row.categorie, row.partenaire, row.classement, row.point, row.validite, row.manuel, userId]
+    [
+      row.date,
+      row.nom,
+      row.categorie,
+      row.partenaire,
+      row.classement,
+      row.point,
+      row.validite,
+      row.manuel,
+      userId,
+    ],
   );
 
   return result.rowCount > 0 ? "inserted" : "skipped";
@@ -389,22 +491,46 @@ async function ensureTournoisSchema() {
       ELSE date::DATE
     END
   `);
-  await getDb().query("ALTER TABLE tournois ADD COLUMN IF NOT EXISTS manuel BOOLEAN");
-  await getDb().query("ALTER TABLE tournois ADD COLUMN IF NOT EXISTS user_id INTEGER REFERENCES users(id) ON DELETE CASCADE");
-  await getDb().query("UPDATE tournois SET manuel = false WHERE manuel IS NULL");
-  await getDb().query("ALTER TABLE tournois ALTER COLUMN manuel SET DEFAULT false");
+  await getDb().query(
+    "ALTER TABLE tournois ADD COLUMN IF NOT EXISTS manuel BOOLEAN",
+  );
+  await getDb().query(
+    "ALTER TABLE tournois ADD COLUMN IF NOT EXISTS user_id INTEGER REFERENCES users(id) ON DELETE CASCADE",
+  );
+  await getDb().query(
+    "UPDATE tournois SET manuel = false WHERE manuel IS NULL",
+  );
+  await getDb().query(
+    "ALTER TABLE tournois ALTER COLUMN manuel SET DEFAULT false",
+  );
   await getDb().query("ALTER TABLE tournois ALTER COLUMN manuel SET NOT NULL");
   await getDb().query("ALTER TABLE tournois ALTER COLUMN date SET NOT NULL");
   await getDb().query("ALTER TABLE tournois ALTER COLUMN nom SET NOT NULL");
-  await getDb().query("ALTER TABLE tournois ALTER COLUMN categorie SET NOT NULL");
-  await getDb().query("ALTER TABLE tournois ALTER COLUMN partenaire SET NOT NULL");
-  await getDb().query("ALTER TABLE tournois ALTER COLUMN classement SET NOT NULL");
+  await getDb().query(
+    "ALTER TABLE tournois ALTER COLUMN categorie SET NOT NULL",
+  );
+  await getDb().query(
+    "ALTER TABLE tournois ALTER COLUMN partenaire SET NOT NULL",
+  );
+  await getDb().query(
+    "ALTER TABLE tournois ALTER COLUMN classement SET NOT NULL",
+  );
   await getDb().query("ALTER TABLE tournois ALTER COLUMN point SET NOT NULL");
   await getDb().query(`
     CREATE INDEX IF NOT EXISTS tournois_lookup_idx
     ON tournois (date, categorie, partenaire, classement, point)
   `);
-  await getDb().query("CREATE INDEX IF NOT EXISTS tournois_user_id_idx ON tournois (user_id)");
+  await getDb().query(
+    "CREATE INDEX IF NOT EXISTS tournois_user_id_idx ON tournois (user_id)",
+  );
+
+  const adminUser = await ensureDefaultAdminUser(true);
+  if (adminUser?.id) {
+    await getDb().query(
+      "UPDATE tournois SET user_id = $1 WHERE user_id IS NULL",
+      [adminUser.id],
+    );
+  }
 }
 
 async function ensureUsersSchema() {
@@ -413,19 +539,113 @@ async function ensureUsersSchema() {
       id SERIAL PRIMARY KEY,
       email TEXT NOT NULL UNIQUE,
       name TEXT NOT NULL,
+      tenup_id TEXT,
       password_hash TEXT NOT NULL,
       password_salt TEXT NOT NULL,
+      role TEXT NOT NULL DEFAULT 'user',
+      approved BOOLEAN NOT NULL DEFAULT false,
+      approved_at TIMESTAMPTZ,
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     )
   `);
+  await getDb().query(
+    "ALTER TABLE users ADD COLUMN IF NOT EXISTS tenup_id TEXT",
+  );
+  await getDb().query("ALTER TABLE users ADD COLUMN IF NOT EXISTS role TEXT");
+  await getDb().query(
+    "ALTER TABLE users ADD COLUMN IF NOT EXISTS approved BOOLEAN",
+  );
+  await getDb().query(
+    "ALTER TABLE users ADD COLUMN IF NOT EXISTS approved_at TIMESTAMPTZ",
+  );
+  await getDb().query(
+    "UPDATE users SET role = 'user' WHERE role IS NULL OR role = ''",
+  );
+  await getDb().query(
+    "UPDATE users SET approved = false WHERE approved IS NULL",
+  );
+  await getDb().query("ALTER TABLE users ALTER COLUMN role SET DEFAULT 'user'");
+  await getDb().query("ALTER TABLE users ALTER COLUMN role SET NOT NULL");
+  await getDb().query(
+    "ALTER TABLE users ALTER COLUMN approved SET DEFAULT false",
+  );
+  await getDb().query("ALTER TABLE users ALTER COLUMN approved SET NOT NULL");
+  await getDb().query(`
+    CREATE UNIQUE INDEX IF NOT EXISTS users_tenup_id_idx
+    ON users (tenup_id)
+    WHERE tenup_id IS NOT NULL AND tenup_id <> ''
+  `);
+  await ensureDefaultAdminUser(false);
 }
 
 function serializeUser(row) {
   return {
     id: row.id,
     email: row.email,
-    name: row.name
+    name: row.name,
+    tenupId: row.tenup_id || row.tenupId || "",
+    role: row.role || "user",
+    approved: row.approved === true,
+    createdAt: row.created_at || row.createdAt || null,
+    approvedAt: row.approved_at || row.approvedAt || null,
   };
+}
+
+async function ensureDefaultAdminUser() {
+  if (!ADMIN_PASSWORD) return null;
+
+  const email = cleanEmail(DEFAULT_ADMIN_EMAIL);
+  const name = cleanText(DEFAULT_ADMIN_NAME, 80) || "Admin";
+  const tenupId = cleanTenupId(DEFAULT_ADMIN_TENUP_ID);
+  if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return null;
+
+  const password = hashPassword(ADMIN_PASSWORD);
+  const result = await getDb().query(
+    `INSERT INTO users (email, name, tenup_id, password_hash, password_salt, role, approved, approved_at)
+     VALUES ($1, $2, NULLIF($3, ''), $4, $5, 'admin', true, NOW())
+     ON CONFLICT (email) DO UPDATE
+       SET name = EXCLUDED.name,
+           tenup_id = EXCLUDED.tenup_id,
+           password_hash = EXCLUDED.password_hash,
+           password_salt = EXCLUDED.password_salt,
+           role = 'admin',
+           approved = true,
+           approved_at = COALESCE(users.approved_at, NOW())
+     RETURNING id, email, name, tenup_id, role, approved, created_at, approved_at`,
+    [email, name, tenupId, password.hash, password.salt],
+  );
+
+  return serializeUser(result.rows[0]);
+}
+
+async function getDefaultAdminUser() {
+  await ensureUsersSchema();
+  const email = cleanEmail(DEFAULT_ADMIN_EMAIL);
+  const result = await getDb().query(
+    `SELECT id, email, name, tenup_id, role, approved, created_at, approved_at
+     FROM users
+     WHERE email = $1 AND role = 'admin'
+     LIMIT 1`,
+    [email],
+  );
+
+  return result.rows[0] ? serializeUser(result.rows[0]) : null;
+}
+
+async function findUserByTenupId(value) {
+  const tenupId = cleanTenupId(value);
+  if (!tenupId) return null;
+
+  await ensureUsersSchema();
+  const result = await getDb().query(
+    `SELECT id, email, name, tenup_id, role, approved, created_at, approved_at
+     FROM users
+     WHERE tenup_id = $1
+     LIMIT 1`,
+    [tenupId],
+  );
+
+  return result.rows[0] ? serializeUser(result.rows[0]) : null;
 }
 
 app.get("/", (req, res) => {
@@ -437,7 +657,10 @@ app.get("/healthz", (req, res) => {
 });
 
 app.post("/auth/register", async (req, res) => {
-  const validation = validateUserPayload(req.body, { requireName: true });
+  const validation = validateUserPayload(req.body, {
+    requireName: true,
+    requireTenupId: true,
+  });
   if (validation.error) {
     return res.status(400).json({ error: validation.error });
   }
@@ -447,21 +670,25 @@ app.post("/auth/register", async (req, res) => {
     const user = validation.value;
     const password = hashPassword(user.password);
     const result = await getDb().query(
-      `INSERT INTO users (email, name, password_hash, password_salt)
-       VALUES ($1, $2, $3, $4)
-       RETURNING id, email, name`,
-      [user.email, user.name, password.hash, password.salt]
+      `INSERT INTO users (email, name, tenup_id, password_hash, password_salt, role, approved)
+       VALUES ($1, $2, $3, $4, $5, 'user', false)
+       RETURNING id, email, name, tenup_id, role, approved, created_at, approved_at`,
+      [user.email, user.name, user.tenupId, password.hash, password.salt],
     );
     const createdUser = serializeUser(result.rows[0]);
 
     res.status(201).json({
       user: createdUser,
-      token: createUserToken(createdUser),
-      expiresAt: new Date(Date.now() + TOKEN_TTL_MS).toISOString()
+      pending: true,
+      message: "Compte cree, en attente de validation admin",
     });
   } catch (err) {
     if (err.code === "23505") {
-      return res.status(409).json({ error: "Un compte existe deja avec cet email" });
+      return res
+        .status(409)
+        .json({
+          error: "Un compte existe deja avec cet email ou cet ID TenUp",
+        });
     }
 
     console.error(err);
@@ -479,20 +706,33 @@ app.post("/auth/login", async (req, res) => {
     await ensureUsersSchema();
     const credentials = validation.value;
     const result = await getDb().query(
-      "SELECT id, email, name, password_hash, password_salt FROM users WHERE email = $1",
-      [credentials.email]
+      "SELECT id, email, name, tenup_id, role, approved, password_hash, password_salt, created_at, approved_at FROM users WHERE email = $1",
+      [credentials.email],
     );
     const user = result.rows[0];
 
-    if (!user || !verifyPassword(credentials.password, user.password_salt, user.password_hash)) {
+    if (
+      !user ||
+      !verifyPassword(
+        credentials.password,
+        user.password_salt,
+        user.password_hash,
+      )
+    ) {
       return res.status(401).json({ error: "Email ou mot de passe incorrect" });
     }
 
     const safeUser = serializeUser(user);
+    if (!safeUser.approved) {
+      return res
+        .status(403)
+        .json({ error: "Compte en attente de validation admin" });
+    }
+
     res.json({
       user: safeUser,
       token: createUserToken(safeUser),
-      expiresAt: new Date(Date.now() + TOKEN_TTL_MS).toISOString()
+      expiresAt: new Date(Date.now() + TOKEN_TTL_MS).toISOString(),
     });
   } catch (err) {
     console.error(err);
@@ -502,6 +742,55 @@ app.post("/auth/login", async (req, res) => {
 
 app.get("/auth/me", requireUser, (req, res) => {
   res.json({ user: req.user });
+});
+
+app.get("/admin/users", requireAdminUser, async (req, res) => {
+  try {
+    await ensureUsersSchema();
+    const status = cleanText(req.query.status || "", 20);
+    const onlyPending = status === "pending";
+    const result = await getDb().query(
+      `SELECT id, email, name, tenup_id, role, approved, created_at, approved_at
+       FROM users
+       WHERE role <> 'admin'
+         AND ($1::boolean = false OR approved = false)
+       ORDER BY created_at ASC`,
+      [onlyPending],
+    );
+
+    res.json({ users: result.rows.map(serializeUser) });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post("/admin/users/:id/approve", requireAdminUser, async (req, res) => {
+  const id = parseId(req.params.id);
+  if (!id) {
+    return res.status(400).json({ error: "Invalid user id" });
+  }
+
+  try {
+    await ensureUsersSchema();
+    const result = await getDb().query(
+      `UPDATE users
+       SET approved = true,
+           approved_at = NOW()
+       WHERE id = $1 AND role <> 'admin'
+       RETURNING id, email, name, tenup_id, role, approved, created_at, approved_at`,
+      [id],
+    );
+
+    if (result.rowCount === 0) {
+      return res.status(404).json({ error: "User not found" });
+    }
+
+    res.json({ user: serializeUser(result.rows[0]) });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: err.message });
+  }
 });
 
 app.post("/init-db", requireAdmin, async (req, res) => {
@@ -514,11 +803,11 @@ app.post("/init-db", requireAdmin, async (req, res) => {
   }
 });
 
-app.get("/tournois", async (req, res) => {
+app.get("/tournois", requireUser, async (req, res) => {
   try {
     await ensureTournoisSchema();
-    const user = getOptionalUser(req);
-    const result = await getDb().query(`
+    const result = await getDb().query(
+      `
       SELECT
         id,
         TO_CHAR(
@@ -537,15 +826,16 @@ app.get("/tournois", async (req, res) => {
         manuel,
         user_id
       FROM tournois
-      WHERE ($1::integer IS NULL AND user_id IS NULL)
-         OR ($1::integer IS NOT NULL AND (user_id = $1::integer OR user_id IS NULL))
+      WHERE user_id = $1
       ORDER BY
         CASE
           WHEN date::TEXT ~ '^[0-9]{2}/[0-9]{2}/[0-9]{4}$' THEN to_date(date::TEXT, 'DD/MM/YYYY')
           ELSE date::DATE
         END DESC,
         point DESC
-    `, [user?.id || null]);
+    `,
+      [req.user.id],
+    );
 
     res.json(result.rows);
   } catch (err) {
@@ -562,7 +852,9 @@ app.post("/tournois", requireUser, async (req, res) => {
 
   try {
     await ensureTournoisSchema();
-    const result = await insertTournoiIfMissing(validation.value, { userId: req.user.id });
+    const result = await insertTournoiIfMissing(validation.value, {
+      userId: req.user.id,
+    });
     if (result === "skipped") {
       return res.json({ message: "Tournoi deja existant", skipped: true });
     }
@@ -589,10 +881,21 @@ app.put("/tournois/:id", requireUser, async (req, res) => {
     const t = validation.value;
     const result = await getDb().query(
       `UPDATE tournois
-       SET date = $1, nom = $2, categorie = $3, partenaire = $4, classement = $5, point = $6, validite = $7, manuel = $8, user_id = $9
-       WHERE id = $10
-         AND (user_id = $9 OR user_id IS NULL)`,
-      [t.date, t.nom, t.categorie, t.partenaire, t.classement, t.point, t.validite, t.manuel, req.user.id, id]
+         SET date = $1, nom = $2, categorie = $3, partenaire = $4, classement = $5, point = $6, validite = $7, manuel = $8, user_id = $9
+         WHERE id = $10
+           AND user_id = $9`,
+      [
+        t.date,
+        t.nom,
+        t.categorie,
+        t.partenaire,
+        t.classement,
+        t.point,
+        t.validite,
+        t.manuel,
+        req.user.id,
+        id,
+      ],
     );
 
     if (result.rowCount === 0) {
@@ -613,8 +916,8 @@ app.delete("/tournois/:id", requireUser, async (req, res) => {
 
   try {
     const result = await getDb().query(
-      "DELETE FROM tournois WHERE id = $1 AND (user_id = $2 OR user_id IS NULL)",
-      [id, req.user.id]
+      "DELETE FROM tournois WHERE id = $1 AND user_id = $2",
+      [id, req.user.id],
     );
     if (result.rowCount === 0) {
       return res.status(404).json({ error: "Tournament not found" });
@@ -629,9 +932,22 @@ app.delete("/tournois/:id", requireUser, async (req, res) => {
 app.post("/import-from-2026mai", requireAdmin, async (req, res) => {
   try {
     const replace = req.query.replace === "true";
+    await ensureTournoisSchema();
+    const adminUser = await getDefaultAdminUser();
+
+    if (!adminUser?.id) {
+      return res
+        .status(500)
+        .json({
+          error:
+            "ADMIN_PASSWORD or ADMIN_API_KEY is required to create the admin account",
+        });
+    }
 
     if (replace) {
-      await getDb().query("TRUNCATE TABLE tournois RESTART IDENTITY");
+      await getDb().query("DELETE FROM tournois WHERE user_id = $1", [
+        adminUser.id,
+      ]);
     }
 
     let imported = 0;
@@ -644,14 +960,18 @@ app.post("/import-from-2026mai", requireAdmin, async (req, res) => {
         partenaire: t.Partenaire,
         classement: t.Classement,
         point: t.Point,
-        validite: t.Validité
+        validite: t.Validité,
       });
 
       if (validation.error) {
         throw new Error(`Invalid seed row "${t.Nom}": ${validation.error}`);
       }
 
-      if (await insertTournoiIfMissing(validation.value) === "inserted") {
+      if (
+        (await insertTournoiIfMissing(validation.value, {
+          userId: adminUser.id,
+        })) === "inserted"
+      ) {
         imported += 1;
       }
     }
@@ -669,7 +989,9 @@ require("./sync-routes")(app, {
   insertTournoiIfMissing,
   ensureTournoisSchema,
   getDb,
-  cleanText
+  cleanText,
+  findUserByTenupId,
+  getDefaultAdminUser,
 });
 
 app.use((err, req, res, next) => {
@@ -680,7 +1002,7 @@ app.use((err, req, res, next) => {
   }
 
   res.status(err.message === "Origin not allowed by CORS" ? 403 : 500).json({
-    error: err.message || "Internal Server Error"
+    error: err.message || "Internal Server Error",
   });
 });
 

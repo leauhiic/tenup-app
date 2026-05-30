@@ -1,5 +1,12 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts";
+import {
+  LineChart,
+  Line,
+  XAxis,
+  YAxis,
+  Tooltip,
+  ResponsiveContainer,
+} from "recharts";
 import {
   buildChartData,
   CATEGORIES,
@@ -12,7 +19,9 @@ import {
   TYPES,
 } from "./fft";
 
-const API = process.env.REACT_APP_API_URL || "https://tenup-app-production.up.railway.app";
+const API =
+  process.env.REACT_APP_API_URL ||
+  "https://tenup-app-production.up.railway.app";
 const LOGO = "/logo-petit.png";
 const AUTH_TOKEN_KEY = "tenupUserToken";
 const AUTH_EXPIRES_KEY = "tenupUserExpiresAt";
@@ -46,6 +55,7 @@ const EMPTY_FORM = {
 const EMPTY_AUTH_FORM = {
   name: "",
   email: "",
+  tenupId: "",
   password: "",
 };
 
@@ -136,10 +146,18 @@ const GLOBAL_CSS = `
   input:focus, select:focus { border-color: #b86438; box-shadow: 0 0 0 3px rgba(184, 100, 56, .13); }
   input[readonly] { color: #7f785d; background: rgba(244, 235, 220, .82); }
   .hint { color: #5a6737; font-size: 12px; font-weight: 800; margin-top: 6px; }
-  .actions, .filters, .section-header { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  .actions, .section-header { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
   .actions { margin-top: 18px; }
-  .filters { margin-bottom: 18px; }
-  .search { max-width: 300px; }
+  .filters {
+    display: grid;
+    grid-template-columns: minmax(240px, 1fr) minmax(150px, 180px) minmax(150px, 180px) auto;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 18px;
+  }
+  .search { max-width: none; }
+  .sort-toggle { display: inline-flex; align-items: center; gap: 8px; white-space: nowrap; }
+  .sort-toggle .btn-ghost { min-width: 64px; }
   .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; margin-bottom: 24px; }
   .stat {
     background: rgba(255, 249, 238, .9);
@@ -208,11 +226,17 @@ const GLOBAL_CSS = `
   .auth-tabs button { border-radius: 8px; border: 1px solid rgba(91, 92, 55, .18); background: rgba(244, 235, 220, .55); color: #454b2c; padding: 10px; font-weight: 800; }
   .auth-tabs button.active { background: rgba(184, 100, 56, .13); border-color: rgba(184, 100, 56, .34); color: #a9532f; }
   .auth-form { display: grid; gap: 13px; }
+  .admin-panel .section-header { margin-top: 0; }
+  .admin-table { overflow-x: auto; }
+  .admin-note { color: #716b56; font-size: 13px; margin-top: -8px; margin-bottom: 14px; }
   @media (max-width: 760px) {
     .header { align-items: flex-start; flex-direction: column; }
     .header-actions, .sync-status { justify-content: flex-start; text-align: left; }
     .brand-mark { width: 62px; height: 42px; }
     .stat-value { font-size: 30px; }
+    .filters { grid-template-columns: 1fr; }
+    .sort-toggle { width: 100%; }
+    .sort-toggle .btn-ghost { flex: 1; }
   }
 `;
 
@@ -273,12 +297,25 @@ function Stat({ label, value, primary, danger }) {
   return (
     <div className={`stat ${primary ? "primary" : ""}`}>
       <div className="stat-label">{label}</div>
-      <div className="stat-value" style={{ color: primary ? "#4e6136" : danger ? "#9b3b31" : undefined }}>{value}</div>
+      <div
+        className="stat-value"
+        style={{ color: primary ? "#4e6136" : danger ? "#9b3b31" : undefined }}
+      >
+        {value}
+      </div>
     </div>
   );
 }
 
-function AuthScreen({ mode, form, loading, feedback, onMode, onChange, onSubmit }) {
+function AuthScreen({
+  mode,
+  form,
+  loading,
+  feedback,
+  onMode,
+  onChange,
+  onSubmit,
+}) {
   const isRegister = mode === "register";
 
   return (
@@ -293,33 +330,85 @@ function AuthScreen({ mode, form, loading, feedback, onMode, onChange, onSubmit 
         </div>
 
         <div className="auth-tabs">
-          <button className={mode === "login" ? "active" : ""} type="button" onClick={() => onMode("login")}>Connexion</button>
-          <button className={isRegister ? "active" : ""} type="button" onClick={() => onMode("register")}>Creation</button>
+          <button
+            className={mode === "login" ? "active" : ""}
+            type="button"
+            onClick={() => onMode("login")}
+          >
+            Connexion
+          </button>
+          <button
+            className={isRegister ? "active" : ""}
+            type="button"
+            onClick={() => onMode("register")}
+          >
+            Creation
+          </button>
         </div>
 
-        {feedback && <div className={`feedback ${feedback.type}`}>{feedback.msg}</div>}
+        {feedback && (
+          <div className={`feedback ${feedback.type}`}>{feedback.msg}</div>
+        )}
 
         <div className="auth-form">
           {isRegister && (
-            <label>Nom
-              <input name="name" value={form.name} onChange={onChange} autoComplete="name" />
-            </label>
+            <>
+              <label>
+                Nom
+                <input
+                  name="name"
+                  value={form.name}
+                  onChange={onChange}
+                  autoComplete="name"
+                />
+              </label>
+              <label>
+                ID TenUp
+                <input
+                  name="tenupId"
+                  value={form.tenupId}
+                  onChange={onChange}
+                  inputMode="numeric"
+                  autoComplete="off"
+                  placeholder="ex: 7146157482"
+                />
+              </label>
+            </>
           )}
-          <label>Email
-            <input type="email" name="email" value={form.email} onChange={onChange} autoComplete="email" />
+          <label>
+            Email
+            <input
+              type="email"
+              name="email"
+              value={form.email}
+              onChange={onChange}
+              autoComplete="email"
+            />
           </label>
-          <label>Mot de passe
+          <label>
+            Mot de passe
             <input
               type="password"
               name="password"
               value={form.password}
               onChange={onChange}
-              onKeyDown={e => { if (e.key === "Enter") onSubmit(); }}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") onSubmit();
+              }}
               autoComplete={isRegister ? "new-password" : "current-password"}
             />
           </label>
-          <button className="btn-primary" type="button" onClick={onSubmit} disabled={loading}>
-            {loading ? "Connexion..." : isRegister ? "Creer le compte" : "Se connecter"}
+          <button
+            className="btn-primary"
+            type="button"
+            onClick={onSubmit}
+            disabled={loading}
+          >
+            {loading
+              ? "Traitement..."
+              : isRegister
+                ? "Creer le compte"
+                : "Se connecter"}
           </button>
         </div>
       </section>
@@ -331,23 +420,42 @@ function RowBadges({ tournament, topRows, kind }) {
   const isTop12 = topRows.includes(tournament);
   let status;
 
-  if (kind === "current") status = <span className="badge warning">mois courant</span>;
-  else if (kind === "upcoming") status = <span className="badge upcoming">a venir</span>;
-  else if (kind === "expiring") status = <span className="badge danger">expire ce mois</span>;
-  else if (kind === "history") status = <span className="badge history">historique</span>;
+  if (kind === "current")
+    status = <span className="badge warning">mois courant</span>;
+  else if (kind === "upcoming")
+    status = <span className="badge upcoming">a venir</span>;
+  else if (kind === "expiring")
+    status = <span className="badge danger">expire ce mois</span>;
+  else if (kind === "history")
+    status = <span className="badge history">historique</span>;
   else if (isTop12) status = <span className="badge top">top 12</span>;
   else status = <span className="badge out">hors top 12</span>;
 
   return (
     <>
-      {tournament.manuel === true && <span className="badge manual">en attente FFT</span>}
+      {tournament.manuel === true && (
+        <span className="badge manual">en attente FFT</span>
+      )}
       {status}
     </>
   );
 }
 
-function TournamentTable({ rows, topRows = [], kind = "active", onEdit, onDelete, canManage = false, deletingId = null }) {
-  if (!rows.length) return <div className="table-wrap"><div className="empty">Aucun tournoi trouve</div></div>;
+function TournamentTable({
+  rows,
+  topRows = [],
+  kind = "active",
+  onEdit,
+  onDelete,
+  canManage = false,
+  deletingId = null,
+}) {
+  if (!rows.length)
+    return (
+      <div className="table-wrap">
+        <div className="empty">Aucun tournoi trouve</div>
+      </div>
+    );
 
   const isLost = kind === "expiring";
 
@@ -370,19 +478,50 @@ function TournamentTable({ rows, topRows = [], kind = "active", onEdit, onDelete
           {rows.map((t, index) => {
             const isTop12 = topRows.includes(t);
             return (
-              <tr key={t.id || `${t.date}-${t.nom}-${index}`} className={t.manuel === true ? "manual-row" : ""}>
+              <tr
+                key={t.id || `${t.date}-${t.nom}-${index}`}
+                className={t.manuel === true ? "manual-row" : ""}
+              >
                 <td className="dim">{t.date}</td>
                 <td>{t.nom}</td>
-                <td><div className="row-badges"><RowBadges tournament={t} topRows={topRows} kind={kind} /></div></td>
-                <td><span className="cat">{t.categorie}</span></td>
+                <td>
+                  <div className="row-badges">
+                    <RowBadges tournament={t} topRows={topRows} kind={kind} />
+                  </div>
+                </td>
+                <td>
+                  <span className="cat">{t.categorie}</span>
+                </td>
                 <td className="dim">{t.partenaire}</td>
                 <td className="dim">{t.classement}e</td>
-                <td><span className={isLost ? "points-lost" : isTop12 ? "points" : "points-out"}>{t.point}</span></td>
+                <td>
+                  <span
+                    className={
+                      isLost ? "points-lost" : isTop12 ? "points" : "points-out"
+                    }
+                  >
+                    {t.point}
+                  </span>
+                </td>
                 {canManage && (
                   <td>
                     <div className="row-actions">
-                      <button className="btn-secondary btn-small" type="button" onClick={() => onEdit(t)} disabled={deletingId === t.id}>Modifier</button>
-                      <button className="btn-danger btn-small" type="button" onClick={() => onDelete(t)} disabled={deletingId === t.id}>{deletingId === t.id ? "..." : "Supprimer"}</button>
+                      <button
+                        className="btn-secondary btn-small"
+                        type="button"
+                        onClick={() => onEdit(t)}
+                        disabled={deletingId === t.id}
+                      >
+                        Modifier
+                      </button>
+                      <button
+                        className="btn-danger btn-small"
+                        type="button"
+                        onClick={() => onDelete(t)}
+                        disabled={deletingId === t.id}
+                      >
+                        {deletingId === t.id ? "..." : "Supprimer"}
+                      </button>
                     </div>
                   </td>
                 )}
@@ -392,6 +531,66 @@ function TournamentTable({ rows, topRows = [], kind = "active", onEdit, onDelete
         </tbody>
       </table>
     </div>
+  );
+}
+
+function AdminUsersPanel({ users, loading, feedback, onRefresh, onApprove }) {
+  return (
+    <section className="panel admin-panel">
+      <div className="section-header">
+        <div className="section-title">Comptes a valider</div>
+        <button
+          className="btn-secondary btn-small"
+          type="button"
+          onClick={onRefresh}
+          disabled={loading}
+        >
+          {loading ? "Chargement..." : "Rafraichir"}
+        </button>
+      </div>
+      <div className="admin-note">
+        Les nouveaux utilisateurs ne peuvent acceder a leurs donnees qu'apres
+        validation.
+      </div>
+      {feedback && (
+        <div className={`feedback ${feedback.type}`}>{feedback.msg}</div>
+      )}
+      {users.length === 0 ? (
+        <div className="empty">Aucun compte en attente.</div>
+      ) : (
+        <div className="admin-table">
+          <table>
+            <thead>
+              <tr>
+                <th>Nom</th>
+                <th>Email</th>
+                <th>ID TenUp</th>
+                <th>Action</th>
+              </tr>
+            </thead>
+            <tbody>
+              {users.map((user) => (
+                <tr key={user.id}>
+                  <td>{user.name}</td>
+                  <td className="dim">{user.email}</td>
+                  <td className="dim">{user.tenupId}</td>
+                  <td>
+                    <button
+                      className="btn-primary btn-small"
+                      type="button"
+                      onClick={() => onApprove(user)}
+                      disabled={loading}
+                    >
+                      Valider
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </section>
   );
 }
 
@@ -416,12 +615,25 @@ export default function App() {
   const [authForm, setAuthForm] = useState(EMPTY_AUTH_FORM);
   const [authFeedback, setAuthFeedback] = useState(null);
   const [authLoading, setAuthLoading] = useState(false);
-  const [authToken, setAuthToken] = useState(() => localStorage.getItem(AUTH_TOKEN_KEY) || "");
-  const [authExpiresAt, setAuthExpiresAt] = useState(() => localStorage.getItem(AUTH_EXPIRES_KEY) || "");
+  const [authToken, setAuthToken] = useState(
+    () => localStorage.getItem(AUTH_TOKEN_KEY) || "",
+  );
+  const [authExpiresAt, setAuthExpiresAt] = useState(
+    () => localStorage.getItem(AUTH_EXPIRES_KEY) || "",
+  );
   const [authUser, setAuthUser] = useState(() => readStoredUser());
+  const [pendingUsers, setPendingUsers] = useState([]);
+  const [loadingUsers, setLoadingUsers] = useState(false);
+  const [adminFeedback, setAdminFeedback] = useState(null);
   const [now] = useState(() => new Date());
 
-  const isAuthenticated = Boolean(authToken && authUser && authExpiresAt && Date.parse(authExpiresAt) > Date.now());
+  const isAuthenticated = Boolean(
+    authToken &&
+      authUser?.approved === true &&
+      authExpiresAt &&
+      Date.parse(authExpiresAt) > Date.now(),
+  );
+  const isAdminUser = authUser?.role === "admin";
 
   useEffect(() => {
     const style = document.createElement("style");
@@ -440,65 +652,118 @@ export default function App() {
     }
   }, [authToken, authExpiresAt]);
 
-  const loadTournois = useCallback(async ({ manual = false, silent = false } = {}) => {
-    if (!authToken) {
-      setTournois([]);
-      setInitialLoading(false);
+  const loadTournois = useCallback(
+    async ({ manual = false, silent = false } = {}) => {
+      if (!isAuthenticated) {
+        setTournois([]);
+        setInitialLoading(false);
+        return;
+      }
+
+      if (manual) setRefreshing(true);
+      if (!manual && !silent) setInitialLoading(true);
+      setLoadError(null);
+
+      try {
+        const res = await fetch(`${API}/tournois`, {
+          cache: "no-store",
+          headers: { Authorization: `Bearer ${authToken}` },
+        });
+        if (!res.ok) {
+          throw new Error(
+            await readApiError(res, "Impossible de charger les tournois."),
+          );
+        }
+
+        const data = await res.json();
+        setTournois(Array.isArray(data) ? data : []);
+        setLastLoadedAt(new Date());
+      } catch (err) {
+        setLoadError(err.message || "Chargement impossible.");
+      } finally {
+        setInitialLoading(false);
+        setRefreshing(false);
+      }
+    },
+    [authToken, isAuthenticated],
+  );
+
+  const loadPendingUsers = useCallback(async () => {
+    if (!isAuthenticated || !authToken || !isAdminUser) {
+      setPendingUsers([]);
       return;
     }
 
-    if (manual) setRefreshing(true);
-    if (!manual && !silent) setInitialLoading(true);
-    setLoadError(null);
-
+    setLoadingUsers(true);
+    setAdminFeedback(null);
     try {
-      const res = await fetch(`${API}/tournois`, {
+      const res = await fetch(`${API}/admin/users?status=pending`, {
         cache: "no-store",
         headers: { Authorization: `Bearer ${authToken}` },
       });
       if (!res.ok) {
-        throw new Error(await readApiError(res, "Impossible de charger les tournois."));
+        throw new Error(
+          await readApiError(res, "Impossible de charger les comptes."),
+        );
       }
 
       const data = await res.json();
-      setTournois(Array.isArray(data) ? data : []);
-      setLastLoadedAt(new Date());
+      setPendingUsers(Array.isArray(data.users) ? data.users : []);
     } catch (err) {
-      setLoadError(err.message || "Chargement impossible.");
+      setAdminFeedback({
+        type: "error",
+        msg: err.message || "Chargement des comptes impossible.",
+      });
     } finally {
-      setInitialLoading(false);
-      setRefreshing(false);
+      setLoadingUsers(false);
     }
-  }, [authToken]);
+  }, [authToken, isAdminUser, isAuthenticated]);
 
   useEffect(() => {
     loadTournois();
   }, [loadTournois]);
 
   useEffect(() => {
+    loadPendingUsers();
+  }, [loadPendingUsers]);
+
+  useEffect(() => {
     if (!autoPoint) return;
     if (form.type && form.tranche && form.classement) {
-      const pts = getPoints(form.type, form.tranche, parseInt(form.classement, 10));
-      setForm(f => ({ ...f, point: pts !== "" ? String(pts) : f.point }));
+      const pts = getPoints(
+        form.type,
+        form.tranche,
+        parseInt(form.classement, 10),
+      );
+      setForm((f) => ({ ...f, point: pts !== "" ? String(pts) : f.point }));
     }
   }, [autoPoint, form.type, form.tranche, form.classement]);
 
   useEffect(() => {
-    if (form.date) setForm(f => ({ ...f, validite: getValidite(f.date) }));
+    if (form.date) setForm((f) => ({ ...f, validite: getValidite(f.date) }));
   }, [form.date]);
 
   useEffect(() => {
     const tranches = TRANCHES[form.type] || [];
-    if (!tranches.includes(form.tranche)) setForm(f => ({ ...f, tranche: tranches[0] || "" }));
+    if (!tranches.includes(form.tranche))
+      setForm((f) => ({ ...f, tranche: tranches[0] || "" }));
   }, [form.type, form.tranche]);
 
   const submitAuth = async () => {
     const email = authForm.email.trim();
     const password = authForm.password;
     const name = authForm.name.trim();
+    const tenupId = authForm.tenupId.trim();
 
-    if (!email || !password || (authMode === "register" && !name)) {
-      setAuthFeedback({ type: "error", msg: "Merci de remplir tous les champs." });
+    if (
+      !email ||
+      !password ||
+      (authMode === "register" && (!name || !tenupId))
+    ) {
+      setAuthFeedback({
+        type: "error",
+        msg: "Merci de remplir tous les champs.",
+      });
       return;
     }
 
@@ -506,7 +771,10 @@ export default function App() {
     setAuthFeedback(null);
     try {
       const endpoint = authMode === "register" ? "register" : "login";
-      const payload = authMode === "register" ? { name, email, password } : { email, password };
+      const payload =
+        authMode === "register"
+          ? { name, email, password, tenupId }
+          : { email, password };
       const res = await fetch(`${API}/auth/${endpoint}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -518,14 +786,36 @@ export default function App() {
       }
 
       const data = await res.json();
+      if (!data.token) {
+        clearStoredSession();
+        setAuthToken("");
+        setAuthExpiresAt("");
+        setAuthUser(null);
+        setAuthMode("login");
+        setAuthForm({ ...EMPTY_AUTH_FORM, email });
+        setAuthFeedback({
+          type: "success",
+          msg:
+            data.message ||
+            "Compte cree. Il doit etre valide par un admin avant connexion.",
+        });
+        return;
+      }
+
       storeSession(data);
       setAuthToken(data.token);
       setAuthExpiresAt(data.expiresAt);
       setAuthUser(data.user);
       setAuthForm(EMPTY_AUTH_FORM);
-      setFeedback({ type: "success", msg: authMode === "register" ? "Compte cree." : "Connexion reussie." });
+      setFeedback({
+        type: "success",
+        msg: authMode === "register" ? "Compte cree." : "Connexion reussie.",
+      });
     } catch (err) {
-      setAuthFeedback({ type: "error", msg: err.message || "Connexion impossible." });
+      setAuthFeedback({
+        type: "error",
+        msg: err.message || "Connexion impossible.",
+      });
     } finally {
       setAuthLoading(false);
     }
@@ -537,6 +827,8 @@ export default function App() {
     setAuthExpiresAt("");
     setAuthUser(null);
     setTournois([]);
+    setPendingUsers([]);
+    setAdminFeedback(null);
     setShowForm(false);
     setEditingId(null);
     setFeedback(null);
@@ -555,7 +847,7 @@ export default function App() {
     setFeedback(null);
   };
 
-  const startEdit = tournament => {
+  const startEdit = (tournament) => {
     setEditingId(tournament.id);
     setAutoPoint(false);
     setForm({
@@ -574,7 +866,7 @@ export default function App() {
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
-  const deleteTournament = async tournament => {
+  const deleteTournament = async (tournament) => {
     if (!window.confirm(`Supprimer "${tournament.nom}" ?`)) return;
 
     setDeletingId(tournament.id);
@@ -585,20 +877,48 @@ export default function App() {
         headers: { Authorization: `Bearer ${authToken}` },
       });
 
-      if (!res.ok) throw new Error(await readApiError(res, "Suppression impossible."));
+      if (!res.ok)
+        throw new Error(await readApiError(res, "Suppression impossible."));
 
       await loadTournois({ silent: true });
       setFeedback({ type: "success", msg: "Tournoi supprime." });
     } catch (err) {
-      setFeedback({ type: "error", msg: err.message || "Suppression impossible." });
+      setFeedback({
+        type: "error",
+        msg: err.message || "Suppression impossible.",
+      });
     } finally {
       setDeletingId(null);
     }
   };
 
-  const currentMonth = now.getMonth();
-  const currentYear = now.getFullYear();
-  const today = new Date(currentYear, currentMonth, now.getDate());
+  const approveUser = async (user) => {
+    setLoadingUsers(true);
+    setAdminFeedback(null);
+    try {
+      const res = await fetch(`${API}/admin/users/${user.id}/approve`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${authToken}` },
+      });
+
+      if (!res.ok)
+        throw new Error(await readApiError(res, "Validation impossible."));
+
+      await loadPendingUsers();
+      setAdminFeedback({
+        type: "success",
+        msg: `Compte valide pour ${user.name}.`,
+      });
+    } catch (err) {
+      setAdminFeedback({
+        type: "error",
+        msg: err.message || "Validation impossible.",
+      });
+    } finally {
+      setLoadingUsers(false);
+    }
+  };
+
   const {
     actifsClassement,
     tournoisMoisCourant,
@@ -607,10 +927,13 @@ export default function App() {
     tournoisAVenir,
   } = getDashboardBuckets(tournois, now);
 
-  const filtered = actifsClassement.filter(t => {
+  const filtered = actifsClassement.filter((t) => {
     const matchesCategory = categorie === "all" || t.categorie === categorie;
     const q = search.trim().toLowerCase();
-    const matchesSearch = !q || t.nom?.toLowerCase().includes(q) || t.partenaire?.toLowerCase().includes(q);
+    const matchesSearch =
+      !q ||
+      t.nom?.toLowerCase().includes(q) ||
+      t.partenaire?.toLowerCase().includes(q);
     return matchesCategory && matchesSearch;
   });
 
@@ -626,19 +949,29 @@ export default function App() {
   const meilleurs = [...actifsClassement]
     .sort((a, b) => Number(b.point || 0) - Number(a.point || 0))
     .slice(0, 12);
-  const totalPoints = meilleurs.reduce((sum, t) => sum + Number(t.point || 0), 0);
-  const moyennePoints = meilleurs.length ? Math.round(totalPoints / meilleurs.length) : 0;
-  const bestScore = actifsClassement.length ? Math.max(...actifsClassement.map(t => Number(t.point || 0))) : 0;
-  const pointsPerdus = tournoisExpirants.reduce((sum, t) => sum + Number(t.point || 0), 0);
-  const poolProjetee = [
-    ...actifsClassement.filter(t => !tournoisExpirants.includes(t)),
+  const totalPoints = meilleurs.reduce(
+    (sum, t) => sum + Number(t.point || 0),
+    0,
+  );
+  const moyennePoints = meilleurs.length
+    ? Math.round(totalPoints / meilleurs.length)
+    : 0;
+  const bestScore = actifsClassement.length
+    ? Math.max(...actifsClassement.map((t) => Number(t.point || 0)))
+    : 0;
+  const pointsPerdus = tournoisExpirants.reduce(
+    (sum, t) => sum + Number(t.point || 0),
+    0,
+  );
+  const poolSimule = [
+    ...actifsClassement.filter((t) => !tournoisExpirants.includes(t)),
     ...tournoisMoisCourant,
   ];
-  const pointsProjetes = [...poolProjetee]
+  const pointsSimules = [...poolSimule]
     .sort((a, b) => Number(b.point || 0) - Number(a.point || 0))
     .slice(0, 12)
     .reduce((sum, t) => sum + Number(t.point || 0), 0);
-  const deltaPoints = pointsProjetes - totalPoints;
+  const deltaPoints = pointsSimules - totalPoints;
 
   const months = useMemo(() => {
     const start = startOfMonth(addMonths(now, -11));
@@ -648,26 +981,36 @@ export default function App() {
     });
   }, [now]);
 
-  const normalized = useMemo(
-    () => normalizeTournois(tournois.filter(t => parseDate(t.date) <= today)),
-    [tournois, today]
+  const normalized = useMemo(() => normalizeTournois(tournois), [tournois]);
+  const chartData = useMemo(
+    () => buildChartData(months, normalized, now),
+    [months, normalized, now],
   );
-  const chartData = useMemo(() => buildChartData(months, normalized, now), [months, normalized, now]);
   const tranchesDisponibles = TRANCHES[form.type] || [];
-  const pointsPreview = form.type && form.tranche && form.classement
-    ? getPoints(form.type, form.tranche, parseInt(form.classement, 10))
-    : null;
+  const pointsPreview =
+    form.type && form.tranche && form.classement
+      ? getPoints(form.type, form.tranche, parseInt(form.classement, 10))
+      : null;
 
-  const handleChange = e => {
+  const handleChange = (e) => {
     const { name, value } = e.target;
     if (name === "point") setAutoPoint(false);
     if (["type", "tranche", "classement"].includes(name)) setAutoPoint(true);
-    setForm(f => ({ ...f, [name]: value }));
+    setForm((f) => ({ ...f, [name]: value }));
   };
 
   const handleSubmit = async () => {
-    if (!form.date || !form.nom || !form.partenaire || !form.classement || !form.point) {
-      setFeedback({ type: "error", msg: "Merci de remplir tous les champs obligatoires." });
+    if (
+      !form.date ||
+      !form.nom ||
+      !form.partenaire ||
+      !form.classement ||
+      !form.point
+    ) {
+      setFeedback({
+        type: "error",
+        msg: "Merci de remplir tous les champs obligatoires.",
+      });
       return;
     }
 
@@ -675,10 +1018,15 @@ export default function App() {
     setFeedback(null);
     try {
       const method = editingId ? "PUT" : "POST";
-      const url = editingId ? `${API}/tournois/${editingId}` : `${API}/tournois`;
+      const url = editingId
+        ? `${API}/tournois/${editingId}`
+        : `${API}/tournois`;
       const res = await fetch(url, {
         method,
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${authToken}` },
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${authToken}`,
+        },
         body: JSON.stringify({
           date: form.date,
           nom: form.nom,
@@ -691,14 +1039,21 @@ export default function App() {
         }),
       });
 
-      if (!res.ok) throw new Error(await readApiError(res, "Enregistrement impossible."));
+      if (!res.ok)
+        throw new Error(await readApiError(res, "Enregistrement impossible."));
 
       await loadTournois({ silent: true });
       resetForm();
       setShowForm(false);
-      setFeedback({ type: "success", msg: editingId ? "Tournoi modifie." : "Tournoi ajoute." });
+      setFeedback({
+        type: "success",
+        msg: editingId ? "Tournoi modifie." : "Tournoi ajoute.",
+      });
     } catch (err) {
-      setFeedback({ type: "error", msg: err.message || "Enregistrement impossible." });
+      setFeedback({
+        type: "error",
+        msg: err.message || "Enregistrement impossible.",
+      });
     } finally {
       setSaving(false);
     }
@@ -709,14 +1064,14 @@ export default function App() {
     setShowForm(false);
   };
 
-  const handleAuthMode = mode => {
+  const handleAuthMode = (mode) => {
     setAuthMode(mode);
     setAuthFeedback(null);
   };
 
-  const handleAuthChange = e => {
+  const handleAuthChange = (e) => {
     const { name, value } = e.target;
-    setAuthForm(f => ({ ...f, [name]: value }));
+    setAuthForm((f) => ({ ...f, [name]: value }));
   };
 
   if (!isAuthenticated) {
@@ -743,49 +1098,186 @@ export default function App() {
           </div>
         </div>
         <div className="header-actions">
-          <button className="btn-secondary" type="button" onClick={() => loadTournois({ manual: true })} disabled={refreshing}>
+          <button
+            className="btn-secondary"
+            type="button"
+            onClick={() => loadTournois({ manual: true })}
+            disabled={refreshing}
+          >
             {refreshing ? "Actualisation..." : "Rafraichir"}
           </button>
           <span className="user-chip">{authUser?.name || authUser?.email}</span>
-          <button className="btn-secondary" type="button" onClick={logoutUser}>Se deconnecter</button>
-          <button className="btn-primary" type="button" onClick={showForm ? cancelForm : openCreateForm}>
+          <button className="btn-secondary" type="button" onClick={logoutUser}>
+            Se deconnecter
+          </button>
+          <button
+            className="btn-primary"
+            type="button"
+            onClick={showForm ? cancelForm : openCreateForm}
+          >
             {showForm ? "Fermer" : "Ajouter un tournoi"}
           </button>
-          <div className="sync-status">Derniere synchro : {formatSyncDate(lastLoadedAt)}</div>
+          <div className="sync-status">
+            Derniere synchro : {formatSyncDate(lastLoadedAt)}
+          </div>
         </div>
       </header>
 
-      {feedback && <div className={`feedback ${feedback.type}`}>{feedback.msg}</div>}
+      {feedback && (
+        <div className={`feedback ${feedback.type}`}>{feedback.msg}</div>
+      )}
 
       {loadError && (
         <div className="feedback error load-error">
           <div>
             <div className="feedback-title">Chargement impossible</div>
-            <div className="feedback-text">{loadError}{tournois.length ? " Les dernieres donnees chargees restent affichees." : ""}</div>
+            <div className="feedback-text">
+              {loadError}
+              {tournois.length
+                ? " Les dernieres donnees chargees restent affichees."
+                : ""}
+            </div>
           </div>
-          <button className="btn-secondary" type="button" onClick={() => loadTournois({ manual: true })} disabled={refreshing}>
+          <button
+            className="btn-secondary"
+            type="button"
+            onClick={() => loadTournois({ manual: true })}
+            disabled={refreshing}
+          >
             Reessayer
           </button>
         </div>
       )}
 
+      {isAdminUser && (
+        <AdminUsersPanel
+          users={pendingUsers}
+          loading={loadingUsers}
+          feedback={adminFeedback}
+          onRefresh={loadPendingUsers}
+          onApprove={approveUser}
+        />
+      )}
+
       {showForm && (
         <section className="panel">
-          <div className="panel-title">{editingId ? "Modifier le tournoi" : "Nouveau tournoi"}</div>
+          <div className="panel-title">
+            {editingId ? "Modifier le tournoi" : "Nouveau tournoi"}
+          </div>
           <div className="form-grid">
-            <label>Date *<input type="date" name="date" value={form.date} onChange={handleChange} /></label>
-            <label>Nom du tournoi *<input name="nom" value={form.nom} onChange={handleChange} placeholder="ex: P250 HOMMES" /></label>
-            <label>Type<select name="type" value={form.type} onChange={handleChange}>{TYPES.map(t => <option key={t}>{t}</option>)}</select></label>
-            <label>Nombre de paires<select name="tranche" value={form.tranche} onChange={handleChange}>{tranchesDisponibles.map(t => <option key={t} value={t}>{t} paires</option>)}</select></label>
-            <label>Categorie<select name="categorie" value={form.categorie} onChange={handleChange}>{CATEGORIES.map(c => <option key={c}>{c}</option>)}</select></label>
-            <label>Partenaire *<input name="partenaire" value={form.partenaire} onChange={handleChange} placeholder="Prenom NOM" /></label>
-            <label>Place finale *<input type="number" min="1" name="classement" value={form.classement} onChange={handleChange} /></label>
-            <label>Points FFT<input type="number" name="point" value={form.point} onChange={handleChange} />{pointsPreview !== "" && pointsPreview != null && <span className="hint">{pointsPreview} pts calcules</span>}</label>
-            <label>Validite<input name="validite" value={form.validite} onChange={handleChange} readOnly /></label>
+            <label>
+              Date *
+              <input
+                type="date"
+                name="date"
+                value={form.date}
+                onChange={handleChange}
+              />
+            </label>
+            <label>
+              Nom du tournoi *
+              <input
+                name="nom"
+                value={form.nom}
+                onChange={handleChange}
+                placeholder="ex: P250 HOMMES"
+              />
+            </label>
+            <label>
+              Type
+              <select name="type" value={form.type} onChange={handleChange}>
+                {TYPES.map((t) => (
+                  <option key={t}>{t}</option>
+                ))}
+              </select>
+            </label>
+            <label>
+              Nombre de paires
+              <select
+                name="tranche"
+                value={form.tranche}
+                onChange={handleChange}
+              >
+                {tranchesDisponibles.map((t) => (
+                  <option key={t} value={t}>
+                    {t} paires
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label>
+              Categorie
+              <select
+                name="categorie"
+                value={form.categorie}
+                onChange={handleChange}
+              >
+                {CATEGORIES.map((c) => (
+                  <option key={c}>{c}</option>
+                ))}
+              </select>
+            </label>
+            <label>
+              Partenaire *
+              <input
+                name="partenaire"
+                value={form.partenaire}
+                onChange={handleChange}
+                placeholder="Prenom NOM"
+              />
+            </label>
+            <label>
+              Place finale *
+              <input
+                type="number"
+                min="1"
+                name="classement"
+                value={form.classement}
+                onChange={handleChange}
+              />
+            </label>
+            <label>
+              Points FFT
+              <input
+                type="number"
+                name="point"
+                value={form.point}
+                onChange={handleChange}
+              />
+              {pointsPreview !== "" && pointsPreview != null && (
+                <span className="hint">{pointsPreview} pts calcules</span>
+              )}
+            </label>
+            <label>
+              Validite
+              <input
+                name="validite"
+                value={form.validite}
+                onChange={handleChange}
+                readOnly
+              />
+            </label>
           </div>
           <div className="actions">
-            <button className="btn-primary" type="button" onClick={handleSubmit} disabled={saving}>{saving ? "Enregistrement..." : editingId ? "Enregistrer" : "Ajouter"}</button>
-            <button className="btn-secondary" type="button" onClick={cancelForm}>Annuler</button>
+            <button
+              className="btn-primary"
+              type="button"
+              onClick={handleSubmit}
+              disabled={saving}
+            >
+              {saving
+                ? "Enregistrement..."
+                : editingId
+                  ? "Enregistrer"
+                  : "Ajouter"}
+            </button>
+            <button
+              className="btn-secondary"
+              type="button"
+              onClick={cancelForm}
+            >
+              Annuler
+            </button>
           </div>
         </section>
       )}
@@ -795,7 +1287,12 @@ export default function App() {
         <Stat label="Tournois actifs" value={sorted.length} />
         <Stat label="Meilleur score" value={bestScore} />
         <Stat label="Moy. Top 12" value={moyennePoints} />
-        <Stat label="Projection" value={`${deltaPoints >= 0 ? "+" : ""}${deltaPoints}`} primary={deltaPoints >= 0} danger={deltaPoints < 0} />
+        <Stat
+          label="Simule"
+          value={`${deltaPoints >= 0 ? "+" : ""}${deltaPoints}`}
+          primary={deltaPoints >= 0}
+          danger={deltaPoints < 0}
+        />
       </section>
 
       <div className="chart">
@@ -804,61 +1301,170 @@ export default function App() {
             <XAxis dataKey="month" interval={2} />
             <YAxis />
             <Tooltip />
-            <Line type="monotone" dataKey="real" stroke="#4e6136" strokeWidth={3} dot connectNulls={false} />
-            <Line type="monotone" dataKey="projected" stroke="#b86438" strokeDasharray="6 6" strokeWidth={2} dot={false} connectNulls={false} />
+            <Line
+              type="monotone"
+              dataKey="real"
+              name="Classement reel"
+              stroke="#4e6136"
+              strokeWidth={3}
+              dot
+              connectNulls={false}
+            />
+            <Line
+              type="monotone"
+              dataKey="simule"
+              name="Classement simule"
+              stroke="#b86438"
+              strokeDasharray="6 6"
+              strokeWidth={2}
+              dot={false}
+              connectNulls={false}
+            />
           </LineChart>
         </ResponsiveContainer>
       </div>
 
       <div className="filters">
-        <input className="search" placeholder="Rechercher tournoi ou partenaire" value={search} onChange={e => setSearch(e.target.value)} />
-        <select value={categorie} onChange={e => setCategorie(e.target.value)}><option value="all">Toutes categories</option>{CATEGORIES.map(c => <option key={c}>{c}</option>)}</select>
-        <select value={tri} onChange={e => setTri(e.target.value)}><option value="points">Trier par points</option><option value="date">Trier par date</option></select>
-        <button className={`btn-ghost ${!ordreAscendant ? "active" : ""}`} type="button" onClick={() => setOrdreAscendant(false)}>Desc</button>
-        <button className={`btn-ghost ${ordreAscendant ? "active" : ""}`} type="button" onClick={() => setOrdreAscendant(true)}>Asc</button>
+        <input
+          className="search"
+          placeholder="Rechercher tournoi ou partenaire"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+        />
+        <select
+          value={categorie}
+          onChange={(e) => setCategorie(e.target.value)}
+        >
+          <option value="all">Toutes categories</option>
+          {CATEGORIES.map((c) => (
+            <option key={c}>{c}</option>
+          ))}
+        </select>
+        <select value={tri} onChange={(e) => setTri(e.target.value)}>
+          <option value="points">Trier par points</option>
+          <option value="date">Trier par date</option>
+        </select>
+        <div className="sort-toggle">
+          <button
+            className={`btn-ghost ${!ordreAscendant ? "active" : ""}`}
+            type="button"
+            onClick={() => setOrdreAscendant(false)}
+          >
+            Desc
+          </button>
+          <button
+            className={`btn-ghost ${ordreAscendant ? "active" : ""}`}
+            type="button"
+            onClick={() => setOrdreAscendant(true)}
+          >
+            Asc
+          </button>
+        </div>
       </div>
 
       {initialLoading ? (
-        <div className="table-wrap"><div className="empty">Chargement des tournois...</div></div>
+        <div className="table-wrap">
+          <div className="empty">Chargement des tournois...</div>
+        </div>
       ) : (
         <>
           <div className="section-header">
             <div className="section-title">Tournois en cours de validite</div>
-            <div className="section-meta"><span className="badge">{sorted.length} resultats</span><span className="badge top">{meilleurs.length} top 12</span></div>
+            <div className="section-meta">
+              <span className="badge">{sorted.length} resultats</span>
+              <span className="badge top">{meilleurs.length} top 12</span>
+            </div>
           </div>
-          <TournamentTable rows={sorted} topRows={meilleurs} kind="active" canManage={isAuthenticated} onEdit={startEdit} onDelete={deleteTournament} deletingId={deletingId} />
+          <TournamentTable
+            rows={sorted}
+            topRows={meilleurs}
+            kind="active"
+            canManage={isAuthenticated}
+            onEdit={startEdit}
+            onDelete={deleteTournament}
+            deletingId={deletingId}
+          />
 
           {tournoisAVenir.length > 0 && (
             <>
               <div className="section-header">
                 <div className="section-title">Tournois a venir</div>
-                <div className="section-meta"><span className="badge upcoming">{tournoisAVenir.length}</span></div>
+                <div className="section-meta">
+                  <span className="badge upcoming">
+                    {tournoisAVenir.length}
+                  </span>
+                </div>
               </div>
-              <TournamentTable rows={[...tournoisAVenir].sort((a, b) => parseDate(a.date) - parseDate(b.date))} kind="upcoming" canManage={isAuthenticated} onEdit={startEdit} onDelete={deleteTournament} deletingId={deletingId} />
+              <TournamentTable
+                rows={[...tournoisAVenir].sort(
+                  (a, b) => parseDate(a.date) - parseDate(b.date),
+                )}
+                kind="upcoming"
+                canManage={isAuthenticated}
+                onEdit={startEdit}
+                onDelete={deleteTournament}
+                deletingId={deletingId}
+              />
             </>
           )}
 
           {tournoisExpirants.length > 0 && (
             <>
               <div className="section-header">
-                <div className="section-title">Expirent fin {now.toLocaleDateString("fr-FR", { month: "long" })}</div>
-                <div className="section-meta"><span className="badge danger">-{pointsPerdus} pts</span></div>
+                <div className="section-title">
+                  Expirent fin{" "}
+                  {now.toLocaleDateString("fr-FR", { month: "long" })}
+                </div>
+                <div className="section-meta">
+                  <span className="badge danger">-{pointsPerdus} pts</span>
+                </div>
               </div>
-              <TournamentTable rows={tournoisExpirants} kind="expiring" canManage={isAuthenticated} onEdit={startEdit} onDelete={deleteTournament} deletingId={deletingId} />
+              <TournamentTable
+                rows={tournoisExpirants}
+                kind="expiring"
+                canManage={isAuthenticated}
+                onEdit={startEdit}
+                onDelete={deleteTournament}
+                deletingId={deletingId}
+              />
             </>
           )}
 
           {tournoisMoisCourant.length > 0 && (
             <>
-              <div className="section-header"><div className="section-title">Tournois du mois</div><span className="badge warning">{tournoisMoisCourant.length}</span></div>
-              <TournamentTable rows={tournoisMoisCourant} kind="current" canManage={isAuthenticated} onEdit={startEdit} onDelete={deleteTournament} deletingId={deletingId} />
+              <div className="section-header">
+                <div className="section-title">Tournois du mois</div>
+                <span className="badge warning">
+                  {tournoisMoisCourant.length}
+                </span>
+              </div>
+              <TournamentTable
+                rows={tournoisMoisCourant}
+                kind="current"
+                canManage={isAuthenticated}
+                onEdit={startEdit}
+                onDelete={deleteTournament}
+                deletingId={deletingId}
+              />
             </>
           )}
 
           {historique.length > 0 && (
             <>
-              <div className="section-header"><div className="section-title dim">Historique</div><span className="badge history">{historique.length}</span></div>
-              <TournamentTable rows={[...historique].sort((a, b) => parseDate(b.date) - parseDate(a.date))} kind="history" canManage={isAuthenticated} onEdit={startEdit} onDelete={deleteTournament} deletingId={deletingId} />
+              <div className="section-header">
+                <div className="section-title dim">Historique</div>
+                <span className="badge history">{historique.length}</span>
+              </div>
+              <TournamentTable
+                rows={[...historique].sort(
+                  (a, b) => parseDate(b.date) - parseDate(a.date),
+                )}
+                kind="history"
+                canManage={isAuthenticated}
+                onEdit={startEdit}
+                onDelete={deleteTournament}
+                deletingId={deletingId}
+              />
             </>
           )}
         </>
