@@ -7,13 +7,13 @@ TenUp bloque les navigateurs automatises. La synchronisation passe donc par une 
 1. Tu te connectes a TenUp dans ton Chrome habituel.
 2. L'extension lit la page classement TenUp depuis cette session.
 3. Elle extrait les resultats detectables.
-4. Elle appelle l'API Railway `POST /tournois/import`.
+4. Elle envoie les resultats avec ton `ID TenUp`; l'API les rattache au compte valide correspondant.
 5. Elle peut relancer une verification automatiquement le 7 du mois si Chrome est ouvert.
 
 ## Pre-requis
 
-- La PR doit etre mergee et l'API Railway redeployee pour exposer `POST /tournois/import`.
-- La variable Railway `ADMIN_API_KEY` doit etre configuree.
+- L'API doit etre redeployee pour exposer `POST /tournois/import/tenup`.
+- Ton compte dashboard doit etre cree avec le meme `ID TenUp` puis valide par un admin.
 - Chrome doit etre installe.
 
 ## Installer l'extension
@@ -28,10 +28,7 @@ TenUp bloque les navigateurs automatises. La synchronisation passe donc par une 
 
 Dans le popup de l'extension :
 
-- `API Railway` : `https://tenup-app-production.up.railway.app`
-- `Cle admin API` : meme valeur que `ADMIN_API_KEY` cote Railway
-- `ID TenUp` : `7146157482`
-- `URL classement` : `https://tenup.fft.fr/classement/7146157482/padel`
+- `ID TenUp` : l'identifiant numerique de ton profil TenUp
 - `Verifier automatiquement le 7 du mois` : actif si tu veux la verification mensuelle
 
 Clique ensuite `Enregistrer`.
@@ -46,8 +43,8 @@ Clique ensuite `Enregistrer`.
 6. Clique `Tester la lecture`.
 7. Si au moins un tournoi est detecte, clique `Synchroniser maintenant`.
 
-Si l'import reussit, le popup affiche le nombre de tournois importes et ignores.
-`Tester la lecture` ne contacte pas Railway ; il sert uniquement a verifier que l'extension voit les donnees TenUp de ta page connectee.
+Si l'import reussit, le popup affiche le nombre de tournois importes, remplaces et ignores.
+`Tester la lecture` ne contacte pas l'API ; il sert uniquement a verifier que l'extension voit les donnees TenUp de ta page connectee.
 
 ## Synchro automatique le 7
 
@@ -62,7 +59,8 @@ Limites importantes :
 
 ## API ajoutee
 
-- `POST /tournois/import` : importe une liste de tournois sans doublons, requiert `x-api-key`.
+- `POST /tournois/import/tenup` : importe une liste de tournois sans doublons et rattache les lignes au compte valide qui porte le meme `ID TenUp`.
+- `POST /tournois/import` : route admin legacy, requiert `x-api-key` ou un jeton admin.
 - `GET /sync/status` : retourne la derniere synchronisation connue.
 
 La route d'import accepte :
@@ -70,6 +68,7 @@ La route d'import accepte :
 ```json
 {
   "source": "tenup-extension",
+  "tenupId": "7146157482",
   "tournois": [
     {
       "date": "2026-05-07",

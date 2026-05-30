@@ -1,9 +1,9 @@
 <!doctype html>
 <html lang="fr">
   <head>
-    <meta charset="utf-8">
+    <meta charset="utf-8" />
     <title>TenUp Sync</title>
-    <link rel="stylesheet" href="popup.css">
+    <link rel="stylesheet" href="popup.css" />
   </head>
   <body>
     <main>
@@ -14,38 +14,39 @@
 
       <form id="settings-form">
         <label>
-          API Railway
-          <input id="api-url" name="apiUrl" type="url" required>
-        </label>
-
-        <label>
-          Cle admin API
-          <input id="admin-api-key" name="adminApiKey" type="password" autocomplete="off" required>
-        </label>
-
-        <label>
           ID TenUp
-          <input id="person-id" name="personId" inputmode="numeric" required>
+          <input
+            id="person-id"
+            name="personId"
+            inputmode="numeric"
+            autocomplete="off"
+            required
+          />
         </label>
-
-        <label>
-          URL classement
-          <input id="classement-url" name="classementUrl" type="url" required>
-        </label>
+        <p class="hint">
+          L'extension ouvre automatiquement la page classement avec cet ID et
+          rattache l'import au compte valide correspondant.
+        </p>
 
         <label class="check">
-          <input id="auto-sync" name="autoSyncEnabled" type="checkbox">
+          <input id="auto-sync" name="autoSyncEnabled" type="checkbox" />
           <span>Verifier automatiquement le 7 du mois</span>
         </label>
 
         <div class="actions">
           <button id="save" type="submit">Enregistrer</button>
-          <button id="open-tenup" type="button" class="secondary">Ouvrir TenUp</button>
+          <button id="open-tenup" type="button" class="secondary">
+            Ouvrir TenUp
+          </button>
         </div>
       </form>
 
-      <button id="test-read" type="button" class="secondary wide">Tester la lecture</button>
-      <button id="sync-now" type="button" class="primary">Synchroniser maintenant</button>
+      <button id="test-read" type="button" class="secondary wide">
+        Tester la lecture
+      </button>
+      <button id="sync-now" type="button" class="primary">
+        Synchroniser maintenant
+      </button>
 
       <section id="status" class="status muted">Chargement...</section>
     </main>

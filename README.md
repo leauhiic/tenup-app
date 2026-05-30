@@ -1,6 +1,6 @@
 # tenup-app
 
-Dashboard personnel pour suivre des resultats de padel TenUp/FFT, calculer le top 12 et visualiser une projection de classement.
+Dashboard personnel pour suivre des resultats de padel TenUp/FFT, calculer le top 12 et visualiser un classement simule.
 
 ## Stack
 
@@ -12,9 +12,9 @@ Dashboard personnel pour suivre des resultats de padel TenUp/FFT, calculer le to
 
 Ne commit jamais de fichier `.env`. Le depot contenait auparavant des secrets en clair : ils doivent etre revoques et remplaces cote TenUp/Railway avant de redeployer.
 
-L'administration passe maintenant par un mot de passe serveur (`ADMIN_PASSWORD`). Le frontend appelle `POST /auth/login`, recoit un jeton court en `sessionStorage`, puis utilise `Authorization: Bearer` pour ajouter, modifier ou supprimer un tournoi.
+L'acces passe par des comptes utilisateur. Un compte cree depuis le frontend doit renseigner son `ID TenUp` et etre valide par un admin avant de pouvoir acceder a l'application.
 
-`ADMIN_API_KEY` reste accepte pour les scripts et les appels API directs via `x-api-key`. Garde `ADMIN_PASSWORD`, `ADMIN_TOKEN_SECRET` et `ADMIN_API_KEY` differents de valeurs publiques.
+Le compte admin est cree automatiquement depuis `ADMIN_EMAIL`, `ADMIN_PASSWORD` et `ADMIN_TENUP_ID`. `ADMIN_API_KEY` reste accepte uniquement pour les scripts legacy et les appels API directs via `x-api-key`; il n'est plus utilise par l'extension Chrome.
 
 ## Backend
 
@@ -28,8 +28,11 @@ npm start
 Variables :
 
 - `DATABASE_URL` : URL PostgreSQL.
-- `ADMIN_PASSWORD` : mot de passe saisi dans l'interface admin.
-- `ADMIN_TOKEN_SECRET` : secret de signature des jetons admin.
+- `ADMIN_EMAIL` : email du compte admin, `admin@tenup.local` par defaut.
+- `ADMIN_NAME` : nom du compte admin, `Loic Vossier` par defaut.
+- `ADMIN_TENUP_ID` : ID TenUp rattache au compte admin, `7146157482` par defaut.
+- `ADMIN_PASSWORD` : mot de passe du compte admin.
+- `ADMIN_TOKEN_SECRET` : secret de signature des jetons.
 - `ADMIN_API_KEY` : cle legacy pour scripts/admin API directs.
 - `CORS_ORIGINS` : origines autorisees separees par des virgules, par exemple `http://localhost:3001,https://app.example`.
 - `PORT` : port HTTP, `3000` par defaut.
@@ -38,14 +41,18 @@ Routes :
 
 - `GET /` : healthcheck.
 - `GET /healthz` : healthcheck detaille.
-- `POST /auth/login` : ouvre une session admin avec `ADMIN_PASSWORD`.
-- `GET /auth/me` : verifie une session admin.
-- `GET /tournois` : liste publique des tournois.
-- `POST /tournois` : ajoute un tournoi, requiert `Authorization: Bearer` ou `x-api-key`.
-- `PUT /tournois/:id` : modifie un tournoi, requiert admin.
-- `DELETE /tournois/:id` : supprime un tournoi, requiert admin.
+- `POST /auth/register` : cree un compte en attente de validation admin.
+- `POST /auth/login` : ouvre une session utilisateur validee.
+- `GET /auth/me` : verifie une session utilisateur.
+- `GET /admin/users?status=pending` : liste les comptes a valider, requiert admin.
+- `POST /admin/users/:id/approve` : valide un compte, requiert admin.
+- `GET /tournois` : liste les tournois du compte connecte.
+- `POST /tournois` : ajoute un tournoi manuel au compte connecte.
+- `PUT /tournois/:id` : modifie un tournoi du compte connecte.
+- `DELETE /tournois/:id` : supprime un tournoi du compte connecte.
 - `POST /init-db` : cree/migre la table, requiert admin.
-- `POST /tournois/import` : importe une liste de tournois sans doublons, requiert admin.
+- `POST /tournois/import/tenup` : importe une liste de tournois et la rattache au compte valide qui porte le meme `ID TenUp`.
+- `POST /tournois/import` : importe une liste de tournois sans doublons, route admin legacy.
 - `GET /sync/status` : retourne la derniere synchronisation connue.
 - `POST /import-from-2026mai` : importe `tournois-202605.json` sans dupliquer les lignes deja presentes, requiert admin.
 - `POST /import-from-2026mai?replace=true` : vide la table puis importe le seed.
@@ -75,7 +82,7 @@ L'interface affiche un etat de chargement, un bouton de rafraichissement, la der
 
 ## Extension Chrome
 
-Le dossier `extension` contient une extension Chrome locale pour synchroniser TenUp depuis une session utilisateur normale. Elle ajoute une synchro manuelle et une verification locale le 7 du mois quand Chrome est ouvert.
+Le dossier `extension` contient une extension Chrome locale pour synchroniser TenUp depuis une session utilisateur normale. Elle ne demande que l'`ID TenUp`, construit l'URL classement automatiquement et importe les lignes sur le compte valide correspondant.
 
 La configuration et le test sont documentes dans `docs/tenup-sync.md`.
 

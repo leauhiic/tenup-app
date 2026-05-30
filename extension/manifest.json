@@ -1,14 +1,9 @@
 {
   "manifest_version": 3,
   "name": "TenUp App Sync",
-  "version": "0.1.0",
-  "description": "Synchronise les resultats TenUp vers le dashboard TenUp App.",
-  "permissions": [
-    "alarms",
-    "scripting",
-    "storage",
-    "tabs"
-  ],
+  "version": "0.2.0",
+  "description": "Synchronise les resultats TenUp avec le compte dashboard lie a l'ID TenUp.",
+  "permissions": ["alarms", "scripting", "storage", "tabs"],
   "host_permissions": [
     "https://tenup.fft.fr/*",
     "https://tenup-app-production.up.railway.app/*"
@@ -22,23 +17,15 @@
   },
   "content_scripts": [
     {
-      "matches": [
-        "https://tenup.fft.fr/*"
-      ],
-      "js": [
-        "content.js"
-      ],
+      "matches": ["https://tenup.fft.fr/*"],
+      "js": ["content.js"],
       "run_at": "document_start"
     }
   ],
   "web_accessible_resources": [
     {
-      "resources": [
-        "page-bridge.js"
-      ],
-      "matches": [
-        "https://tenup.fft.fr/*"
-      ]
+      "resources": ["page-bridge.js"],
+      "matches": ["https://tenup.fft.fr/*"]
     }
   ]
 }

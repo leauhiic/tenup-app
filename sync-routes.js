@@ -50,6 +50,147 @@ module.exports = function registerSyncRoutes(app, helpers) {
     );
   }
 
+  async function validateImportRows(rows, source) {
+    if (!Array.isArray(rows)) {
+      return {
+        response: { status: 400, body: { error: "tournois must be an array" } },
+      };
+    }
+
+    const values = [];
+    const errors = [];
+
+    rows.forEach((row, index) => {
+      const validation = validateTournoiPayload({ ...row, manuel: false });
+      if (validation.error) {
+        errors.push({ index, error: validation.error });
+        return;
+      }
+
+      values.push(validation.value);
+    });
+
+    if (errors.length) {
+      await recordSyncRun({
+        source,
+        status: "failed",
+        received: rows.length,
+        imported: 0,
+        skipped: rows.length,
+        message: "Import rejected: invalid tournament rows",
+        details: { errors: errors.slice(0, 20) },
+      });
+
+      return {
+        response: {
+          status: 400,
+          body: { error: "Invalid tournament rows", errors },
+        },
+      };
+    }
+
+    return { values };
+  }
+
+  async function resolveImportOwner({ tenupId, source, received }) {
+    const owner = tenupId
+      ? await findUserByTenupId(tenupId)
+      : await getDefaultAdminUser();
+
+    if (!owner?.id) {
+      await recordSyncRun({
+        source,
+        status: "failed",
+        received,
+        imported: 0,
+        skipped: received,
+        message: tenupId
+          ? "Import rejected: unknown TenUp id"
+          : "Import rejected: admin account unavailable",
+        details: { tenupId },
+      });
+
+      return {
+        response: {
+          status: tenupId ? 404 : 500,
+          body: {
+            error: tenupId ? "ID TenUp inconnu" : "Compte admin indisponible",
+          },
+        },
+      };
+    }
+
+    if (owner.approved !== true) {
+      await recordSyncRun({
+        source,
+        status: "failed",
+        received,
+        imported: 0,
+        skipped: received,
+        message: "Import rejected: account pending approval",
+        details: { tenupId, userId: owner.id },
+      });
+
+      return {
+        response: {
+          status: 403,
+          body: { error: "Compte en attente de validation admin" },
+        },
+      };
+    }
+
+    return { owner };
+  }
+
+  async function importRowsForOwner({ source, values, owner, replace }) {
+    if (replace) {
+      await getDb().query("DELETE FROM tournois WHERE user_id = $1", [
+        owner.id,
+      ]);
+    }
+
+    let imported = 0;
+    let updated = 0;
+    for (const tournoi of values) {
+      const result = await insertTournoiIfMissing(tournoi, {
+        imported: true,
+        userId: owner.id,
+      });
+      if (result === "inserted") {
+        imported += 1;
+      } else if (result === "updated") {
+        updated += 1;
+      }
+    }
+
+    const skipped = values.length - imported - updated;
+    await recordSyncRun({
+      source,
+      status: "success",
+      received: values.length,
+      imported,
+      skipped,
+      message: replace
+        ? "Import completed with replacement"
+        : "Import completed",
+      details: {
+        replace,
+        updated,
+        tenupId: owner.tenupId,
+        userId: owner.id,
+      },
+    });
+
+    return {
+      message: "Import reussi",
+      received: values.length,
+      imported,
+      updated,
+      skipped,
+      replaced: replace,
+    };
+  }
+
   app.get("/sync/status", async (req, res) => {
     try {
       await ensureSyncRunsTable();
@@ -82,116 +223,97 @@ module.exports = function registerSyncRoutes(app, helpers) {
       32,
     ).replace(/\s+/g, "");
 
-    if (!Array.isArray(rows)) {
-      return res.status(400).json({ error: "tournois must be an array" });
-    }
-
-    const values = [];
-    const errors = [];
-
-    rows.forEach((row, index) => {
-      const validation = validateTournoiPayload({ ...row, manuel: false });
-      if (validation.error) {
-        errors.push({ index, error: validation.error });
-        return;
-      }
-
-      values.push(validation.value);
-    });
-
-    if (errors.length) {
-      await recordSyncRun({
-        source,
-        status: "failed",
-        received: rows.length,
-        imported: 0,
-        skipped: rows.length,
-        message: "Import rejected: invalid tournament rows",
-        details: { errors: errors.slice(0, 20) },
-      });
-
-      return res.status(400).json({ error: "Invalid tournament rows", errors });
-    }
-
     try {
       await ensureTournoisSchema();
-      const owner = tenupId
-        ? await findUserByTenupId(tenupId)
-        : await getDefaultAdminUser();
+      const validation = await validateImportRows(rows, source);
+      if (validation.response)
+        return res
+          .status(validation.response.status)
+          .json(validation.response.body);
 
-      if (!owner?.id) {
-        await recordSyncRun({
-          source,
-          status: "failed",
-          received: values.length,
-          imported: 0,
-          skipped: values.length,
-          message: tenupId
-            ? "Import rejected: unknown TenUp id"
-            : "Import rejected: admin account unavailable",
-          details: { tenupId },
-        });
-
-        return res.status(tenupId ? 404 : 500).json({
-          error: tenupId ? "TenUp id inconnu" : "Compte admin indisponible",
-        });
-      }
-
-      if (replace) {
-        await getDb().query("DELETE FROM tournois WHERE user_id = $1", [
-          owner.id,
-        ]);
-      }
-
-      let imported = 0;
-      let updated = 0;
-      for (const tournoi of values) {
-        const result = await insertTournoiIfMissing(tournoi, {
-          imported: true,
-          userId: owner.id,
-        });
-        if (result === "inserted") {
-          imported += 1;
-        } else if (result === "updated") {
-          updated += 1;
-        }
-      }
-
-      const skipped = values.length - imported - updated;
-      await recordSyncRun({
+      const ownership = await resolveImportOwner({
+        tenupId,
         source,
-        status: "success",
-        received: values.length,
-        imported,
-        skipped,
-        message: replace
-          ? "Import completed with replacement"
-          : "Import completed",
-        details: {
-          replace,
-          updated,
-          tenupId: owner.tenupId || tenupId,
-          userId: owner.id,
-        },
+        received: validation.values.length,
       });
+      if (ownership.response)
+        return res
+          .status(ownership.response.status)
+          .json(ownership.response.body);
 
-      res.json({
-        message: "Import reussi",
-        received: values.length,
-        imported,
-        updated,
-        skipped,
-        replaced: replace,
-      });
+      res.json(
+        await importRowsForOwner({
+          source,
+          values: validation.values,
+          owner: ownership.owner,
+          replace,
+        }),
+      );
     } catch (err) {
       console.error(err);
       await recordSyncRun({
         source,
         status: "failed",
-        received: values.length,
+        received: Array.isArray(rows) ? rows.length : 0,
         imported: 0,
-        skipped: values.length,
+        skipped: Array.isArray(rows) ? rows.length : 0,
         message: err.message,
+        details: { tenupId },
+      });
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.post("/tournois/import/tenup", async (req, res) => {
+    const body = req.body || {};
+    const rows = Array.isArray(body) ? body : body.tournois;
+    const source =
+      cleanText(body.source || "tenup-extension", 60) || "tenup-extension";
+    const tenupId = cleanText(body.tenupId || body.tenup_id || "", 32).replace(
+      /\s+/g,
+      "",
+    );
+
+    if (!tenupId) {
+      return res.status(400).json({ error: "ID TenUp requis" });
+    }
+
+    try {
+      await ensureTournoisSchema();
+      const validation = await validateImportRows(rows, source);
+      if (validation.response)
+        return res
+          .status(validation.response.status)
+          .json(validation.response.body);
+
+      const ownership = await resolveImportOwner({
+        tenupId,
+        source,
+        received: validation.values.length,
+      });
+      if (ownership.response)
+        return res
+          .status(ownership.response.status)
+          .json(ownership.response.body);
+
+      res.json(
+        await importRowsForOwner({
+          source,
+          values: validation.values,
+          owner: ownership.owner,
+          replace: false,
+        }),
+      );
+    } catch (err) {
+      console.error(err);
+      await recordSyncRun({
+        source,
+        status: "failed",
+        received: Array.isArray(rows) ? rows.length : 0,
+        imported: 0,
+        skipped: Array.isArray(rows) ? rows.length : 0,
+        message: err.message,
+        details: { tenupId },
       });
       res.status(500).json({ error: err.message });
     }

@@ -5,23 +5,20 @@ const testButton = document.getElementById("test-read");
 const openButton = document.getElementById("open-tenup");
 
 const fields = {
-  apiUrl: document.getElementById("api-url"),
-  adminApiKey: document.getElementById("admin-api-key"),
   personId: document.getElementById("person-id"),
-  classementUrl: document.getElementById("classement-url"),
-  autoSyncEnabled: document.getElementById("auto-sync")
+  autoSyncEnabled: document.getElementById("auto-sync"),
 };
 
 load();
 
-form.addEventListener("submit", async event => {
+form.addEventListener("submit", async (event) => {
   event.preventDefault();
   setBusy(true);
   setStatus("Enregistrement...", "muted");
 
   const response = await sendMessage({
     type: "SAVE_SETTINGS",
-    settings: readForm()
+    settings: readForm(),
   });
 
   setBusy(false);
@@ -49,7 +46,7 @@ syncButton.addEventListener("click", async () => {
   const result = response.result || {};
   setStatus(
     `Synchronise : ${result.imported || 0} importes, ${result.updated || 0} remplaces, ${result.skipped || 0} ignores.`,
-    "success"
+    "success",
   );
 });
 
@@ -71,9 +68,15 @@ testButton.addEventListener("click", async () => {
   const details = `captures ${diagnostics.capturedPayloads || 0}, lignes ${diagnostics.domRows || 0}`;
 
   if (count > 0) {
-    setStatus(`Lecture OK : ${count} tournoi(s) detecte(s), ${details}.`, "success");
+    setStatus(
+      `Lecture OK : ${count} tournoi(s) detecte(s), ${details}.`,
+      "success",
+    );
   } else {
-    setStatus(`Lecture OK, mais aucun tournoi detecte (${details}). Recharge la page TenUp puis reessaie.`, "error");
+    setStatus(
+      `Lecture OK, mais aucun tournoi detecte (${details}). Recharge la page TenUp puis reessaie.`,
+      "error",
+    );
   }
 });
 
@@ -85,7 +88,10 @@ openButton.addEventListener("click", async () => {
   if (!response.ok) {
     setStatus(response.error || "Ouverture TenUp impossible", "error");
   } else {
-    setStatus("Page TenUp ouverte. Connecte-toi puis relance la synchro.", "muted");
+    setStatus(
+      "Page TenUp ouverte. Connecte-toi puis relance la synchro.",
+      "muted",
+    );
   }
 });
 
@@ -102,19 +108,13 @@ async function load() {
 
 function readForm() {
   return {
-    apiUrl: fields.apiUrl.value,
-    adminApiKey: fields.adminApiKey.value,
     personId: fields.personId.value,
-    classementUrl: fields.classementUrl.value,
-    autoSyncEnabled: fields.autoSyncEnabled.checked
+    autoSyncEnabled: fields.autoSyncEnabled.checked,
   };
 }
 
 function fillForm(settings) {
-  fields.apiUrl.value = settings.apiUrl || "";
-  fields.adminApiKey.value = settings.adminApiKey || "";
   fields.personId.value = settings.personId || "";
-  fields.classementUrl.value = settings.classementUrl || "";
   fields.autoSyncEnabled.checked = settings.autoSyncEnabled !== false;
 }
 
@@ -128,22 +128,25 @@ function renderLastRun(lastRun) {
     day: "2-digit",
     month: "2-digit",
     hour: "2-digit",
-    minute: "2-digit"
+    minute: "2-digit",
   });
 
   if (lastRun.ok) {
     setStatus(
-      `Derniere synchro ${date} : ${lastRun.imported || 0} importes, ${lastRun.skipped || 0} ignores.`,
-      "success"
+      `Derniere synchro ${date} : ${lastRun.imported || 0} importes, ${lastRun.updated || 0} remplaces, ${lastRun.skipped || 0} ignores.`,
+      "success",
     );
   } else {
-    setStatus(`Derniere synchro ${date} : ${lastRun.error || "echec"}`, "error");
+    setStatus(
+      `Derniere synchro ${date} : ${lastRun.error || "echec"}`,
+      "error",
+    );
   }
 }
 
 function sendMessage(message) {
-  return new Promise(resolve => {
-    chrome.runtime.sendMessage(message, response => {
+  return new Promise((resolve) => {
+    chrome.runtime.sendMessage(message, (response) => {
       const err = chrome.runtime.lastError;
       if (err) resolve({ ok: false, error: err.message });
       else resolve(response || { ok: false, error: "Reponse extension vide" });
@@ -155,7 +158,7 @@ function setBusy(isBusy) {
   syncButton.disabled = isBusy;
   testButton.disabled = isBusy;
   openButton.disabled = isBusy;
-  form.querySelectorAll("button, input").forEach(element => {
+  form.querySelectorAll("button, input").forEach((element) => {
     if (element.id !== "sync-now" && element.id !== "open-tenup") {
       element.disabled = isBusy;
     }
