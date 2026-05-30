@@ -13,6 +13,10 @@ import {
 } from "./fft";
 
 const API = process.env.REACT_APP_API_URL || "https://tenup-app-production.up.railway.app";
+const LOGO = "/logo-petit.png";
+const AUTH_TOKEN_KEY = "tenupUserToken";
+const AUTH_EXPIRES_KEY = "tenupUserExpiresAt";
+const AUTH_USER_KEY = "tenupUser";
 
 function addMonths(date, amount) {
   return new Date(date.getFullYear(), date.getMonth() + amount, date.getDate());
@@ -39,6 +43,12 @@ const EMPTY_FORM = {
   manuel: true,
 };
 
+const EMPTY_AUTH_FORM = {
+  name: "",
+  email: "",
+  password: "",
+};
+
 const GLOBAL_CSS = `
   *, *::before, *::after { box-sizing: border-box; }
   body {
@@ -53,6 +63,8 @@ const GLOBAL_CSS = `
     font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   }
   .tenup-app { max-width: 1240px; margin: 0 auto; padding: 28px 20px 56px; }
+  .brand { display: flex; align-items: center; gap: 14px; min-width: 0; flex: 1; }
+  .brand-mark { width: 74px; height: 48px; object-fit: contain; border-radius: 6px; mix-blend-mode: multiply; }
   .header {
     display: flex;
     align-items: center;
@@ -65,9 +77,10 @@ const GLOBAL_CSS = `
     background: rgba(255, 249, 238, .84);
     box-shadow: 0 18px 42px rgba(78, 58, 36, .1);
   }
-  .logo { color: #454b2c; font-family: Georgia, "Times New Roman", serif; font-weight: 700; font-size: 34px; letter-spacing: 0; line-height: 1; }
+  .logo { color: #454b2c; font-family: Georgia, "Times New Roman", serif; font-weight: 700; font-size: 30px; letter-spacing: 0; line-height: 1.05; }
   .logo span, .accent { color: #b86438; }
   .subtitle { color: #8a5a38; font-size: 13px; text-transform: uppercase; letter-spacing: 0; margin-top: 7px; font-weight: 700; }
+  .user-chip { color: #6f6c52; font-size: 13px; font-weight: 700; padding: 9px 12px; border: 1px solid rgba(91, 92, 55, .16); border-radius: 8px; background: rgba(255, 248, 236, .72); }
   .header-actions { display: flex; justify-content: flex-end; align-items: center; gap: 10px; flex-wrap: wrap; }
   .sync-status { color: #6f6c52; font-size: 12px; white-space: nowrap; width: 100%; text-align: right; }
   button, input, select { font: inherit; }
@@ -173,19 +186,32 @@ const GLOBAL_CSS = `
   th, td { padding: 12px 14px; text-align: left; white-space: nowrap; border-bottom: 1px solid rgba(91, 92, 55, .12); }
   th { color: #6f6c52; font-size: 12px; text-transform: uppercase; letter-spacing: 0; background: rgba(239, 228, 209, .88); }
   tr:last-child td { border-bottom: 0; }
+  tbody tr:nth-child(even) td { background: rgba(244, 235, 220, .42); }
+  tbody tr:nth-child(odd) td { background: rgba(255, 252, 245, .38); }
   tbody tr:hover td { background: rgba(255, 255, 255, .28); }
   .manual-row td { background: rgba(221, 174, 111, .12); }
   .manual-row td:first-child { box-shadow: inset 3px 0 0 #b86438; }
   .dim { color: #716b56; }
   .points { color: #4e6136; font-weight: 900; }
-  .points-out { color: #716b56; font-weight: 800; }
+  .points-out { color: #b86438; font-weight: 900; }
   .points-lost { color: #9b3b31; font-weight: 900; }
   .cat { display: inline-block; min-width: 34px; border-radius: 6px; padding: 2px 8px; text-align: center; color: #454b2c; background: rgba(88, 104, 57, .1); font-weight: 900; font-size: 12px; }
   .row-badges, .row-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
   .empty { padding: 32px; color: #716b56; text-align: center; }
+  .auth-shell { min-height: 100vh; display: grid; place-items: center; padding: 24px; }
+  .auth-panel { width: min(460px, 100%); background: rgba(255, 249, 238, .9); border: 1px solid rgba(91, 92, 55, .16); border-radius: 8px; padding: 26px; box-shadow: 0 22px 54px rgba(78, 58, 36, .12); }
+  .auth-brand { display: grid; justify-items: center; gap: 10px; margin-bottom: 22px; text-align: center; }
+  .auth-brand img { width: 164px; max-width: 100%; mix-blend-mode: multiply; }
+  .auth-title { color: #454b2c; font-family: Georgia, "Times New Roman", serif; font-size: 30px; font-weight: 700; }
+  .auth-subtitle { color: #8a5a38; font-size: 13px; font-weight: 800; text-transform: uppercase; }
+  .auth-tabs { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 18px; }
+  .auth-tabs button { border-radius: 8px; border: 1px solid rgba(91, 92, 55, .18); background: rgba(244, 235, 220, .55); color: #454b2c; padding: 10px; font-weight: 800; }
+  .auth-tabs button.active { background: rgba(184, 100, 56, .13); border-color: rgba(184, 100, 56, .34); color: #a9532f; }
+  .auth-form { display: grid; gap: 13px; }
   @media (max-width: 760px) {
     .header { align-items: flex-start; flex-direction: column; }
     .header-actions, .sync-status { justify-content: flex-start; text-align: left; }
+    .brand-mark { width: 62px; height: 42px; }
     .stat-value { font-size: 30px; }
   }
 `;
@@ -223,11 +249,80 @@ function toInputDate(value) {
   return "";
 }
 
+function readStoredUser() {
+  try {
+    return JSON.parse(localStorage.getItem(AUTH_USER_KEY) || "null");
+  } catch {
+    return null;
+  }
+}
+
+function storeSession({ token, expiresAt, user }) {
+  localStorage.setItem(AUTH_TOKEN_KEY, token);
+  localStorage.setItem(AUTH_EXPIRES_KEY, expiresAt);
+  localStorage.setItem(AUTH_USER_KEY, JSON.stringify(user));
+}
+
+function clearStoredSession() {
+  localStorage.removeItem(AUTH_TOKEN_KEY);
+  localStorage.removeItem(AUTH_EXPIRES_KEY);
+  localStorage.removeItem(AUTH_USER_KEY);
+}
+
 function Stat({ label, value, primary, danger }) {
   return (
     <div className={`stat ${primary ? "primary" : ""}`}>
       <div className="stat-label">{label}</div>
       <div className="stat-value" style={{ color: primary ? "#4e6136" : danger ? "#9b3b31" : undefined }}>{value}</div>
+    </div>
+  );
+}
+
+function AuthScreen({ mode, form, loading, feedback, onMode, onChange, onSubmit }) {
+  const isRegister = mode === "register";
+
+  return (
+    <div className="auth-shell">
+      <section className="auth-panel">
+        <div className="auth-brand">
+          <img src={LOGO} alt="" />
+          <div>
+            <div className="auth-title">Dashboard classement padel</div>
+            <div className="auth-subtitle">Classement FFT</div>
+          </div>
+        </div>
+
+        <div className="auth-tabs">
+          <button className={mode === "login" ? "active" : ""} type="button" onClick={() => onMode("login")}>Connexion</button>
+          <button className={isRegister ? "active" : ""} type="button" onClick={() => onMode("register")}>Creation</button>
+        </div>
+
+        {feedback && <div className={`feedback ${feedback.type}`}>{feedback.msg}</div>}
+
+        <div className="auth-form">
+          {isRegister && (
+            <label>Nom
+              <input name="name" value={form.name} onChange={onChange} autoComplete="name" />
+            </label>
+          )}
+          <label>Email
+            <input type="email" name="email" value={form.email} onChange={onChange} autoComplete="email" />
+          </label>
+          <label>Mot de passe
+            <input
+              type="password"
+              name="password"
+              value={form.password}
+              onChange={onChange}
+              onKeyDown={e => { if (e.key === "Enter") onSubmit(); }}
+              autoComplete={isRegister ? "new-password" : "current-password"}
+            />
+          </label>
+          <button className="btn-primary" type="button" onClick={onSubmit} disabled={loading}>
+            {loading ? "Connexion..." : isRegister ? "Creer le compte" : "Se connecter"}
+          </button>
+        </div>
+      </section>
     </div>
   );
 }
@@ -307,7 +402,6 @@ export default function App() {
   const [categorie, setCategorie] = useState("all");
   const [ordreAscendant, setOrdreAscendant] = useState(false);
   const [showForm, setShowForm] = useState(false);
-  const [showLogin, setShowLogin] = useState(false);
   const [form, setForm] = useState(EMPTY_FORM);
   const [editingId, setEditingId] = useState(null);
   const [autoPoint, setAutoPoint] = useState(true);
@@ -318,13 +412,16 @@ export default function App() {
   const [loadError, setLoadError] = useState(null);
   const [lastLoadedAt, setLastLoadedAt] = useState(null);
   const [feedback, setFeedback] = useState(null);
-  const [adminPassword, setAdminPassword] = useState("");
+  const [authMode, setAuthMode] = useState("login");
+  const [authForm, setAuthForm] = useState(EMPTY_AUTH_FORM);
+  const [authFeedback, setAuthFeedback] = useState(null);
   const [authLoading, setAuthLoading] = useState(false);
-  const [authToken, setAuthToken] = useState(() => sessionStorage.getItem("tenupAdminToken") || "");
-  const [authExpiresAt, setAuthExpiresAt] = useState(() => sessionStorage.getItem("tenupAdminExpiresAt") || "");
+  const [authToken, setAuthToken] = useState(() => localStorage.getItem(AUTH_TOKEN_KEY) || "");
+  const [authExpiresAt, setAuthExpiresAt] = useState(() => localStorage.getItem(AUTH_EXPIRES_KEY) || "");
+  const [authUser, setAuthUser] = useState(() => readStoredUser());
   const [now] = useState(() => new Date());
 
-  const isAdmin = Boolean(authToken && authExpiresAt && Date.parse(authExpiresAt) > Date.now());
+  const isAuthenticated = Boolean(authToken && authUser && authExpiresAt && Date.parse(authExpiresAt) > Date.now());
 
   useEffect(() => {
     const style = document.createElement("style");
@@ -336,20 +433,29 @@ export default function App() {
   useEffect(() => {
     const expires = Date.parse(authExpiresAt || "");
     if (authToken && (!expires || expires <= Date.now())) {
-      sessionStorage.removeItem("tenupAdminToken");
-      sessionStorage.removeItem("tenupAdminExpiresAt");
+      clearStoredSession();
       setAuthToken("");
       setAuthExpiresAt("");
+      setAuthUser(null);
     }
   }, [authToken, authExpiresAt]);
 
   const loadTournois = useCallback(async ({ manual = false, silent = false } = {}) => {
+    if (!authToken) {
+      setTournois([]);
+      setInitialLoading(false);
+      return;
+    }
+
     if (manual) setRefreshing(true);
     if (!manual && !silent) setInitialLoading(true);
     setLoadError(null);
 
     try {
-      const res = await fetch(`${API}/tournois`, { cache: "no-store" });
+      const res = await fetch(`${API}/tournois`, {
+        cache: "no-store",
+        headers: { Authorization: `Bearer ${authToken}` },
+      });
       if (!res.ok) {
         throw new Error(await readApiError(res, "Impossible de charger les tournois."));
       }
@@ -363,7 +469,7 @@ export default function App() {
       setInitialLoading(false);
       setRefreshing(false);
     }
-  }, []);
+  }, [authToken]);
 
   useEffect(() => {
     loadTournois();
@@ -386,48 +492,55 @@ export default function App() {
     if (!tranches.includes(form.tranche)) setForm(f => ({ ...f, tranche: tranches[0] || "" }));
   }, [form.type, form.tranche]);
 
-  const loginAdmin = async () => {
-    if (!adminPassword.trim()) {
-      setFeedback({ type: "error", msg: "Le mot de passe admin est requis." });
+  const submitAuth = async () => {
+    const email = authForm.email.trim();
+    const password = authForm.password;
+    const name = authForm.name.trim();
+
+    if (!email || !password || (authMode === "register" && !name)) {
+      setAuthFeedback({ type: "error", msg: "Merci de remplir tous les champs." });
       return;
     }
 
     setAuthLoading(true);
-    setFeedback(null);
+    setAuthFeedback(null);
     try {
-      const res = await fetch(`${API}/auth/login`, {
+      const endpoint = authMode === "register" ? "register" : "login";
+      const payload = authMode === "register" ? { name, email, password } : { email, password };
+      const res = await fetch(`${API}/auth/${endpoint}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ password: adminPassword }),
+        body: JSON.stringify(payload),
       });
 
       if (!res.ok) {
-        throw new Error(await readApiError(res, "Connexion admin refusee."));
+        throw new Error(await readApiError(res, "Connexion refusee."));
       }
 
       const data = await res.json();
-      sessionStorage.setItem("tenupAdminToken", data.token);
-      sessionStorage.setItem("tenupAdminExpiresAt", data.expiresAt);
+      storeSession(data);
       setAuthToken(data.token);
       setAuthExpiresAt(data.expiresAt);
-      setAdminPassword("");
-      setShowLogin(false);
-      setFeedback({ type: "success", msg: "Mode admin active." });
+      setAuthUser(data.user);
+      setAuthForm(EMPTY_AUTH_FORM);
+      setFeedback({ type: "success", msg: authMode === "register" ? "Compte cree." : "Connexion reussie." });
     } catch (err) {
-      setFeedback({ type: "error", msg: err.message || "Connexion admin impossible." });
+      setAuthFeedback({ type: "error", msg: err.message || "Connexion impossible." });
     } finally {
       setAuthLoading(false);
     }
   };
 
-  const logoutAdmin = () => {
-    sessionStorage.removeItem("tenupAdminToken");
-    sessionStorage.removeItem("tenupAdminExpiresAt");
+  const logoutUser = () => {
+    clearStoredSession();
     setAuthToken("");
     setAuthExpiresAt("");
+    setAuthUser(null);
+    setTournois([]);
     setShowForm(false);
     setEditingId(null);
-    setFeedback({ type: "success", msg: "Session admin fermee." });
+    setFeedback(null);
+    setAuthFeedback({ type: "success", msg: "Session fermee." });
   };
 
   const resetForm = () => {
@@ -437,24 +550,12 @@ export default function App() {
   };
 
   const openCreateForm = () => {
-    if (!isAdmin) {
-      setShowLogin(true);
-      setFeedback({ type: "error", msg: "Connecte-toi en admin pour modifier les tournois." });
-      return;
-    }
-
     resetForm();
     setShowForm(true);
     setFeedback(null);
   };
 
   const startEdit = tournament => {
-    if (!isAdmin) {
-      setShowLogin(true);
-      setFeedback({ type: "error", msg: "Connecte-toi en admin pour modifier les tournois." });
-      return;
-    }
-
     setEditingId(tournament.id);
     setAutoPoint(false);
     setForm({
@@ -474,12 +575,6 @@ export default function App() {
   };
 
   const deleteTournament = async tournament => {
-    if (!isAdmin) {
-      setShowLogin(true);
-      setFeedback({ type: "error", msg: "Connecte-toi en admin pour supprimer un tournoi." });
-      return;
-    }
-
     if (!window.confirm(`Supprimer "${tournament.nom}" ?`)) return;
 
     setDeletingId(tournament.id);
@@ -575,11 +670,6 @@ export default function App() {
       setFeedback({ type: "error", msg: "Merci de remplir tous les champs obligatoires." });
       return;
     }
-    if (!isAdmin) {
-      setShowLogin(true);
-      setFeedback({ type: "error", msg: "Connecte-toi en admin pour enregistrer." });
-      return;
-    }
 
     setSaving(true);
     setFeedback(null);
@@ -619,22 +709,45 @@ export default function App() {
     setShowForm(false);
   };
 
-  const adminActionLabel = isAdmin ? "Se deconnecter" : "Admin";
+  const handleAuthMode = mode => {
+    setAuthMode(mode);
+    setAuthFeedback(null);
+  };
+
+  const handleAuthChange = e => {
+    const { name, value } = e.target;
+    setAuthForm(f => ({ ...f, [name]: value }));
+  };
+
+  if (!isAuthenticated) {
+    return (
+      <AuthScreen
+        mode={authMode}
+        form={authForm}
+        loading={authLoading}
+        feedback={authFeedback}
+        onMode={handleAuthMode}
+        onChange={handleAuthChange}
+        onSubmit={submitAuth}
+      />
+    );
+  }
 
   return (
     <div className="tenup-app">
       <header className="header">
-        <div>
-          <div className="logo">TEN<span>UP</span></div>
-          <div className="subtitle">Dashboard Padel - FFT 2026</div>
+        <div className="brand">
+          <img className="brand-mark" src={LOGO} alt="" />
+          <div>
+            <div className="logo">Dashboard classement padel</div>
+          </div>
         </div>
         <div className="header-actions">
           <button className="btn-secondary" type="button" onClick={() => loadTournois({ manual: true })} disabled={refreshing}>
             {refreshing ? "Actualisation..." : "Rafraichir"}
           </button>
-          <button className="btn-secondary" type="button" onClick={isAdmin ? logoutAdmin : () => setShowLogin(v => !v)}>
-            {adminActionLabel}
-          </button>
+          <span className="user-chip">{authUser?.name || authUser?.email}</span>
+          <button className="btn-secondary" type="button" onClick={logoutUser}>Se deconnecter</button>
           <button className="btn-primary" type="button" onClick={showForm ? cancelForm : openCreateForm}>
             {showForm ? "Fermer" : "Ajouter un tournoi"}
           </button>
@@ -654,27 +767,6 @@ export default function App() {
             Reessayer
           </button>
         </div>
-      )}
-
-      {showLogin && !isAdmin && (
-        <section className="panel compact">
-          <div className="panel-title">Connexion admin</div>
-          <div className="form-grid">
-            <label>Mot de passe admin
-              <input
-                type="password"
-                value={adminPassword}
-                onChange={e => setAdminPassword(e.target.value)}
-                onKeyDown={e => { if (e.key === "Enter") loginAdmin(); }}
-                autoComplete="current-password"
-              />
-            </label>
-          </div>
-          <div className="actions">
-            <button className="btn-primary" type="button" onClick={loginAdmin} disabled={authLoading}>{authLoading ? "Connexion..." : "Se connecter"}</button>
-            <button className="btn-secondary" type="button" onClick={() => setShowLogin(false)}>Annuler</button>
-          </div>
-        </section>
       )}
 
       {showForm && (
@@ -734,7 +826,7 @@ export default function App() {
             <div className="section-title">Tournois en cours de validite</div>
             <div className="section-meta"><span className="badge">{sorted.length} resultats</span><span className="badge top">{meilleurs.length} top 12</span></div>
           </div>
-          <TournamentTable rows={sorted} topRows={meilleurs} kind="active" canManage={isAdmin} onEdit={startEdit} onDelete={deleteTournament} deletingId={deletingId} />
+          <TournamentTable rows={sorted} topRows={meilleurs} kind="active" canManage={isAuthenticated} onEdit={startEdit} onDelete={deleteTournament} deletingId={deletingId} />
 
           {tournoisAVenir.length > 0 && (
             <>
@@ -742,7 +834,7 @@ export default function App() {
                 <div className="section-title">Tournois a venir</div>
                 <div className="section-meta"><span className="badge upcoming">{tournoisAVenir.length}</span></div>
               </div>
-              <TournamentTable rows={[...tournoisAVenir].sort((a, b) => parseDate(a.date) - parseDate(b.date))} kind="upcoming" canManage={isAdmin} onEdit={startEdit} onDelete={deleteTournament} deletingId={deletingId} />
+              <TournamentTable rows={[...tournoisAVenir].sort((a, b) => parseDate(a.date) - parseDate(b.date))} kind="upcoming" canManage={isAuthenticated} onEdit={startEdit} onDelete={deleteTournament} deletingId={deletingId} />
             </>
           )}
 
@@ -752,21 +844,21 @@ export default function App() {
                 <div className="section-title">Expirent fin {now.toLocaleDateString("fr-FR", { month: "long" })}</div>
                 <div className="section-meta"><span className="badge danger">-{pointsPerdus} pts</span></div>
               </div>
-              <TournamentTable rows={tournoisExpirants} kind="expiring" canManage={isAdmin} onEdit={startEdit} onDelete={deleteTournament} deletingId={deletingId} />
+              <TournamentTable rows={tournoisExpirants} kind="expiring" canManage={isAuthenticated} onEdit={startEdit} onDelete={deleteTournament} deletingId={deletingId} />
             </>
           )}
 
           {tournoisMoisCourant.length > 0 && (
             <>
               <div className="section-header"><div className="section-title">Tournois du mois</div><span className="badge warning">{tournoisMoisCourant.length}</span></div>
-              <TournamentTable rows={tournoisMoisCourant} kind="current" canManage={isAdmin} onEdit={startEdit} onDelete={deleteTournament} deletingId={deletingId} />
+              <TournamentTable rows={tournoisMoisCourant} kind="current" canManage={isAuthenticated} onEdit={startEdit} onDelete={deleteTournament} deletingId={deletingId} />
             </>
           )}
 
           {historique.length > 0 && (
             <>
               <div className="section-header"><div className="section-title dim">Historique</div><span className="badge history">{historique.length}</span></div>
-              <TournamentTable rows={[...historique].sort((a, b) => parseDate(b.date) - parseDate(a.date))} kind="history" canManage={isAdmin} onEdit={startEdit} onDelete={deleteTournament} deletingId={deletingId} />
+              <TournamentTable rows={[...historique].sort((a, b) => parseDate(b.date) - parseDate(a.date))} kind="history" canManage={isAuthenticated} onEdit={startEdit} onDelete={deleteTournament} deletingId={deletingId} />
             </>
           )}
         </>

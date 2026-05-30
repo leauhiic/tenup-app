@@ -10,6 +10,8 @@ const ADMIN_API_KEY = process.env.ADMIN_API_KEY;
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || ADMIN_API_KEY;
 const ADMIN_TOKEN_SECRET = process.env.ADMIN_TOKEN_SECRET || ADMIN_API_KEY;
 const TOKEN_TTL_MS = 12 * 60 * 60 * 1000;
+const PASSWORD_KEYLEN = 32;
+const PASSWORD_ITERATIONS = 120000;
 const allowedOrigins = (process.env.CORS_ORIGINS || "")
   .split(",")
   .map(origin => origin.trim())
@@ -76,7 +78,19 @@ function createAdminToken() {
   return `${body}.${signTokenBody(body)}`;
 }
 
-function verifyAdminToken(token) {
+function createUserToken(user) {
+  const payload = {
+    role: "user",
+    userId: user.id,
+    email: user.email,
+    name: user.name || "",
+    exp: Date.now() + TOKEN_TTL_MS
+  };
+  const body = base64url(JSON.stringify(payload));
+  return `${body}.${signTokenBody(body)}`;
+}
+
+function verifyToken(token) {
   if (!ADMIN_TOKEN_SECRET || typeof token !== "string") return false;
 
   const [body, signature] = token.split(".");
@@ -85,10 +99,16 @@ function verifyAdminToken(token) {
 
   try {
     const payload = JSON.parse(Buffer.from(body, "base64url").toString("utf8"));
-    return payload.role === "admin" && Number(payload.exp) > Date.now();
+    if (Number(payload.exp) <= Date.now()) return false;
+    return payload;
   } catch (err) {
     return false;
   }
+}
+
+function verifyAdminToken(token) {
+  const payload = verifyToken(token);
+  return Boolean(payload && payload.role === "admin");
 }
 
 function getBearerToken(req) {
@@ -113,6 +133,24 @@ function requireAdmin(req, res, next) {
   }
 
   res.status(401).json({ error: "Unauthorized" });
+}
+
+function getOptionalUser(req) {
+  const payload = verifyToken(getBearerToken(req));
+  return payload && payload.role === "user"
+    ? { id: payload.userId, email: payload.email, name: payload.name || "" }
+    : null;
+}
+
+function requireUser(req, res, next) {
+  const user = getOptionalUser(req);
+  if (!user) {
+    res.status(401).json({ error: "Unauthorized" });
+    return;
+  }
+
+  req.user = user;
+  next();
 }
 
 function parseDateToISO(value) {
@@ -146,6 +184,40 @@ function cleanText(value, maxLength = 160) {
   return value.trim().slice(0, maxLength);
 }
 
+function cleanEmail(value) {
+  return cleanText(value, 254).toLowerCase();
+}
+
+function validateUserPayload(payload = {}, { requireName = false } = {}) {
+  const email = cleanEmail(payload.email);
+  const password = typeof payload.password === "string" ? payload.password : "";
+  const name = cleanText(payload.name, 80);
+
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    return { error: "email is invalid" };
+  }
+  if (password.length < 8) {
+    return { error: "password must be at least 8 characters" };
+  }
+  if (requireName && !name) {
+    return { error: "name is required" };
+  }
+
+  return { value: { email, password, name } };
+}
+
+function hashPassword(password, salt = crypto.randomBytes(16).toString("base64url")) {
+  const hash = crypto
+    .pbkdf2Sync(password, salt, PASSWORD_ITERATIONS, PASSWORD_KEYLEN, "sha256")
+    .toString("base64url");
+  return { salt, hash };
+}
+
+function verifyPassword(password, salt, expectedHash) {
+  const { hash } = hashPassword(password, salt);
+  return safeCompare(hash, expectedHash);
+}
+
 function validateTournoiPayload(payload = {}, options = {}) {
   const date = parseDateToISO(payload.date);
   const nom = cleanText(payload.nom);
@@ -173,9 +245,9 @@ function parseId(value) {
 
 async function insertTournoi(tournoi) {
   await getDb().query(
-    `INSERT INTO tournois (date, nom, categorie, partenaire, classement, point, validite, manuel)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
-    [tournoi.date, tournoi.nom, tournoi.categorie, tournoi.partenaire, tournoi.classement, tournoi.point, tournoi.validite, tournoi.manuel === true]
+    `INSERT INTO tournois (date, nom, categorie, partenaire, classement, point, validite, manuel, user_id)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+    [tournoi.date, tournoi.nom, tournoi.categorie, tournoi.partenaire, tournoi.classement, tournoi.point, tournoi.validite, tournoi.manuel === true, tournoi.userId || null]
   );
 }
 
@@ -199,7 +271,7 @@ function namesLikelyMatch(left, right) {
   return Boolean(leftType && rightType && leftType === rightType);
 }
 
-async function findExactTournoi(tournoi) {
+async function findExactTournoi(tournoi, userId = null) {
   const result = await getDb().query(
     `SELECT id, manuel
      FROM tournois
@@ -209,9 +281,13 @@ async function findExactTournoi(tournoi) {
        AND LOWER(partenaire) = LOWER($4)
        AND classement = $5
        AND point = $6
+       AND (
+         ($7::integer IS NULL AND user_id IS NULL)
+         OR ($7::integer IS NOT NULL AND (user_id = $7::integer OR user_id IS NULL))
+       )
      ORDER BY manuel DESC, id ASC
      LIMIT 1`,
-    [tournoi.date, tournoi.nom, tournoi.categorie, tournoi.partenaire, tournoi.classement, tournoi.point]
+    [tournoi.date, tournoi.nom, tournoi.categorie, tournoi.partenaire, tournoi.classement, tournoi.point, userId]
   );
 
   return result.rows[0] || null;
@@ -255,12 +331,13 @@ async function deleteTournoiById(id) {
 
 async function insertTournoiIfMissing(tournoi, options = {}) {
   const imported = options.imported === true;
+  const userId = options.userId || null;
   const row = {
     ...tournoi,
     manuel: imported ? false : tournoi.manuel === true
   };
 
-  const existing = await findExactTournoi(row);
+  const existing = await findExactTournoi(row, userId);
 
   if (imported) {
     const manualMatch = await findManualTournoiMatch(row);
@@ -278,17 +355,18 @@ async function insertTournoiIfMissing(tournoi, options = {}) {
   if (existing) return "skipped";
 
   const result = await getDb().query(
-    `INSERT INTO tournois (date, nom, categorie, partenaire, classement, point, validite, manuel)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+    `INSERT INTO tournois (date, nom, categorie, partenaire, classement, point, validite, manuel, user_id)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
      ON CONFLICT DO NOTHING
      RETURNING id`,
-    [row.date, row.nom, row.categorie, row.partenaire, row.classement, row.point, row.validite, row.manuel]
+    [row.date, row.nom, row.categorie, row.partenaire, row.classement, row.point, row.validite, row.manuel, userId]
   );
 
   return result.rowCount > 0 ? "inserted" : "skipped";
 }
 
 async function ensureTournoisSchema() {
+  await ensureUsersSchema();
   await getDb().query(`
     CREATE TABLE IF NOT EXISTS tournois (
       id SERIAL PRIMARY KEY,
@@ -299,7 +377,8 @@ async function ensureTournoisSchema() {
       classement INTEGER NOT NULL CHECK (classement > 0),
       point INTEGER NOT NULL CHECK (point > 0),
       validite TEXT,
-      manuel BOOLEAN NOT NULL DEFAULT false
+      manuel BOOLEAN NOT NULL DEFAULT false,
+      user_id INTEGER REFERENCES users(id) ON DELETE CASCADE
     )
   `);
   await getDb().query(`
@@ -311,6 +390,7 @@ async function ensureTournoisSchema() {
     END
   `);
   await getDb().query("ALTER TABLE tournois ADD COLUMN IF NOT EXISTS manuel BOOLEAN");
+  await getDb().query("ALTER TABLE tournois ADD COLUMN IF NOT EXISTS user_id INTEGER REFERENCES users(id) ON DELETE CASCADE");
   await getDb().query("UPDATE tournois SET manuel = false WHERE manuel IS NULL");
   await getDb().query("ALTER TABLE tournois ALTER COLUMN manuel SET DEFAULT false");
   await getDb().query("ALTER TABLE tournois ALTER COLUMN manuel SET NOT NULL");
@@ -324,6 +404,28 @@ async function ensureTournoisSchema() {
     CREATE INDEX IF NOT EXISTS tournois_lookup_idx
     ON tournois (date, categorie, partenaire, classement, point)
   `);
+  await getDb().query("CREATE INDEX IF NOT EXISTS tournois_user_id_idx ON tournois (user_id)");
+}
+
+async function ensureUsersSchema() {
+  await getDb().query(`
+    CREATE TABLE IF NOT EXISTS users (
+      id SERIAL PRIMARY KEY,
+      email TEXT NOT NULL UNIQUE,
+      name TEXT NOT NULL,
+      password_hash TEXT NOT NULL,
+      password_salt TEXT NOT NULL,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `);
+}
+
+function serializeUser(row) {
+  return {
+    id: row.id,
+    email: row.email,
+    name: row.name
+  };
 }
 
 app.get("/", (req, res) => {
@@ -334,25 +436,72 @@ app.get("/healthz", (req, res) => {
   res.json({ status: "ok", service: "tenup-api", port: PORT });
 });
 
-app.post("/auth/login", (req, res) => {
-  if (!ADMIN_PASSWORD || !ADMIN_TOKEN_SECRET) {
-    res.status(503).json({ error: "Admin login is not configured" });
-    return;
+app.post("/auth/register", async (req, res) => {
+  const validation = validateUserPayload(req.body, { requireName: true });
+  if (validation.error) {
+    return res.status(400).json({ error: validation.error });
   }
 
-  if (!safeCompare(req.body?.password, ADMIN_PASSWORD)) {
-    res.status(401).json({ error: "Invalid password" });
-    return;
-  }
+  try {
+    await ensureUsersSchema();
+    const user = validation.value;
+    const password = hashPassword(user.password);
+    const result = await getDb().query(
+      `INSERT INTO users (email, name, password_hash, password_salt)
+       VALUES ($1, $2, $3, $4)
+       RETURNING id, email, name`,
+      [user.email, user.name, password.hash, password.salt]
+    );
+    const createdUser = serializeUser(result.rows[0]);
 
-  res.json({
-    token: createAdminToken(),
-    expiresAt: new Date(Date.now() + TOKEN_TTL_MS).toISOString()
-  });
+    res.status(201).json({
+      user: createdUser,
+      token: createUserToken(createdUser),
+      expiresAt: new Date(Date.now() + TOKEN_TTL_MS).toISOString()
+    });
+  } catch (err) {
+    if (err.code === "23505") {
+      return res.status(409).json({ error: "Un compte existe deja avec cet email" });
+    }
+
+    console.error(err);
+    res.status(500).json({ error: err.message });
+  }
 });
 
-app.get("/auth/me", requireAdmin, (req, res) => {
-  res.json({ role: "admin" });
+app.post("/auth/login", async (req, res) => {
+  const validation = validateUserPayload(req.body);
+  if (validation.error) {
+    return res.status(400).json({ error: validation.error });
+  }
+
+  try {
+    await ensureUsersSchema();
+    const credentials = validation.value;
+    const result = await getDb().query(
+      "SELECT id, email, name, password_hash, password_salt FROM users WHERE email = $1",
+      [credentials.email]
+    );
+    const user = result.rows[0];
+
+    if (!user || !verifyPassword(credentials.password, user.password_salt, user.password_hash)) {
+      return res.status(401).json({ error: "Email ou mot de passe incorrect" });
+    }
+
+    const safeUser = serializeUser(user);
+    res.json({
+      user: safeUser,
+      token: createUserToken(safeUser),
+      expiresAt: new Date(Date.now() + TOKEN_TTL_MS).toISOString()
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get("/auth/me", requireUser, (req, res) => {
+  res.json({ user: req.user });
 });
 
 app.post("/init-db", requireAdmin, async (req, res) => {
@@ -368,6 +517,7 @@ app.post("/init-db", requireAdmin, async (req, res) => {
 app.get("/tournois", async (req, res) => {
   try {
     await ensureTournoisSchema();
+    const user = getOptionalUser(req);
     const result = await getDb().query(`
       SELECT
         id,
@@ -384,15 +534,18 @@ app.get("/tournois", async (req, res) => {
         classement,
         point,
         validite,
-        manuel
+        manuel,
+        user_id
       FROM tournois
+      WHERE ($1::integer IS NULL AND user_id IS NULL)
+         OR ($1::integer IS NOT NULL AND (user_id = $1::integer OR user_id IS NULL))
       ORDER BY
         CASE
           WHEN date::TEXT ~ '^[0-9]{2}/[0-9]{2}/[0-9]{4}$' THEN to_date(date::TEXT, 'DD/MM/YYYY')
           ELSE date::DATE
         END DESC,
         point DESC
-    `);
+    `, [user?.id || null]);
 
     res.json(result.rows);
   } catch (err) {
@@ -401,7 +554,7 @@ app.get("/tournois", async (req, res) => {
   }
 });
 
-app.post("/tournois", requireAdmin, async (req, res) => {
+app.post("/tournois", requireUser, async (req, res) => {
   const validation = validateTournoiPayload(req.body, { defaultManuel: true });
   if (validation.error) {
     return res.status(400).json({ error: validation.error });
@@ -409,7 +562,7 @@ app.post("/tournois", requireAdmin, async (req, res) => {
 
   try {
     await ensureTournoisSchema();
-    const result = await insertTournoiIfMissing(validation.value);
+    const result = await insertTournoiIfMissing(validation.value, { userId: req.user.id });
     if (result === "skipped") {
       return res.json({ message: "Tournoi deja existant", skipped: true });
     }
@@ -420,7 +573,7 @@ app.post("/tournois", requireAdmin, async (req, res) => {
   }
 });
 
-app.put("/tournois/:id", requireAdmin, async (req, res) => {
+app.put("/tournois/:id", requireUser, async (req, res) => {
   const id = parseId(req.params.id);
   if (!id) {
     return res.status(400).json({ error: "Invalid tournament id" });
@@ -436,9 +589,10 @@ app.put("/tournois/:id", requireAdmin, async (req, res) => {
     const t = validation.value;
     const result = await getDb().query(
       `UPDATE tournois
-       SET date = $1, nom = $2, categorie = $3, partenaire = $4, classement = $5, point = $6, validite = $7, manuel = $8
-       WHERE id = $9`,
-      [t.date, t.nom, t.categorie, t.partenaire, t.classement, t.point, t.validite, t.manuel, id]
+       SET date = $1, nom = $2, categorie = $3, partenaire = $4, classement = $5, point = $6, validite = $7, manuel = $8, user_id = $9
+       WHERE id = $10
+         AND (user_id = $9 OR user_id IS NULL)`,
+      [t.date, t.nom, t.categorie, t.partenaire, t.classement, t.point, t.validite, t.manuel, req.user.id, id]
     );
 
     if (result.rowCount === 0) {
@@ -451,14 +605,17 @@ app.put("/tournois/:id", requireAdmin, async (req, res) => {
   }
 });
 
-app.delete("/tournois/:id", requireAdmin, async (req, res) => {
+app.delete("/tournois/:id", requireUser, async (req, res) => {
   const id = parseId(req.params.id);
   if (!id) {
     return res.status(400).json({ error: "Invalid tournament id" });
   }
 
   try {
-    const result = await getDb().query("DELETE FROM tournois WHERE id = $1", [id]);
+    const result = await getDb().query(
+      "DELETE FROM tournois WHERE id = $1 AND (user_id = $2 OR user_id IS NULL)",
+      [id, req.user.id]
+    );
     if (result.rowCount === 0) {
       return res.status(404).json({ error: "Tournament not found" });
     }
