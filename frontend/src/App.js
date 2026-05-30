@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts";
-import { addMonths, format, startOfMonth } from "date-fns";
 import {
   buildChartData,
   CATEGORIES,
+  getDashboardBuckets,
   getPoints,
   getValidite,
   normalizeTournois,
@@ -13,6 +13,18 @@ import {
 } from "./fft";
 
 const API = process.env.REACT_APP_API_URL || "https://tenup-app-production.up.railway.app";
+
+function addMonths(date, amount) {
+  return new Date(date.getFullYear(), date.getMonth() + amount, date.getDate());
+}
+
+function startOfMonth(date) {
+  return new Date(date.getFullYear(), date.getMonth(), 1);
+}
+
+function formatMonthLabel(date) {
+  return date.toLocaleDateString("fr-FR", { month: "short", year: "numeric" });
+}
 
 const EMPTY_FORM = {
   date: "",
@@ -29,73 +41,148 @@ const EMPTY_FORM = {
 
 const GLOBAL_CSS = `
   *, *::before, *::after { box-sizing: border-box; }
-  body { margin: 0; background: #0a0c0f; color: #e8eaed; font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
-  .tenup-app { max-width: 1200px; margin: 0 auto; padding: 28px 20px 56px; }
-  .header { display: flex; align-items: center; justify-content: space-between; gap: 16px; border-bottom: 1px solid rgba(255,255,255,.1); padding-bottom: 22px; margin-bottom: 18px; }
-  .logo { font-weight: 900; font-size: 34px; letter-spacing: .03em; }
-  .logo span, .accent { color: #00e676; }
-  .subtitle { color: #8a909a; font-size: 13px; text-transform: uppercase; letter-spacing: .08em; margin-top: 2px; }
+  body {
+    margin: 0;
+    background: #eadcc6;
+    background-image:
+      linear-gradient(90deg, rgba(93, 91, 56, .045) 1px, transparent 1px),
+      linear-gradient(0deg, rgba(178, 108, 62, .035) 1px, transparent 1px),
+      linear-gradient(135deg, #f6eddf 0%, #ead9bd 48%, #d8c19d 100%);
+    background-size: 42px 42px, 42px 42px, auto;
+    color: #2b261d;
+    font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  }
+  .tenup-app { max-width: 1240px; margin: 0 auto; padding: 28px 20px 56px; }
+  .header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 18px;
+    border: 1px solid rgba(91, 92, 55, .18);
+    border-radius: 8px;
+    padding: 18px 20px;
+    margin-bottom: 18px;
+    background: rgba(255, 249, 238, .84);
+    box-shadow: 0 18px 42px rgba(78, 58, 36, .1);
+  }
+  .logo { color: #454b2c; font-family: Georgia, "Times New Roman", serif; font-weight: 700; font-size: 34px; letter-spacing: 0; line-height: 1; }
+  .logo span, .accent { color: #b86438; }
+  .subtitle { color: #8a5a38; font-size: 13px; text-transform: uppercase; letter-spacing: 0; margin-top: 7px; font-weight: 700; }
   .header-actions { display: flex; justify-content: flex-end; align-items: center; gap: 10px; flex-wrap: wrap; }
-  .sync-status { color: #8a909a; font-size: 12px; white-space: nowrap; width: 100%; text-align: right; }
+  .sync-status { color: #6f6c52; font-size: 12px; white-space: nowrap; width: 100%; text-align: right; }
   button, input, select { font: inherit; }
   button { cursor: pointer; }
   button:disabled { cursor: not-allowed; opacity: .55; }
-  .btn-primary { background: #00e676; color: #050607; border: 0; border-radius: 8px; padding: 10px 16px; font-weight: 800; }
-  .btn-primary:hover:not(:disabled) { background: #27ef8e; }
-  .btn-secondary, .btn-ghost, .btn-danger { background: #22272f; color: #e8eaed; border: 1px solid rgba(255,255,255,.1); border-radius: 8px; padding: 9px 14px; }
-  .btn-ghost.active { border-color: #00e676; color: #00e676; background: rgba(0,230,118,.12); }
-  .btn-danger { color: #ff6b86; background: rgba(255,77,109,.08); border-color: rgba(255,77,109,.25); }
+  .btn-primary {
+    background: linear-gradient(180deg, #c97947, #a9532f);
+    color: #fff8ec;
+    border: 1px solid rgba(126, 59, 30, .3);
+    border-radius: 8px;
+    padding: 10px 16px;
+    font-weight: 800;
+    box-shadow: 0 10px 20px rgba(169, 83, 47, .18);
+  }
+  .btn-primary:hover:not(:disabled) { background: linear-gradient(180deg, #d18753, #b45d35); }
+  .btn-secondary, .btn-ghost, .btn-danger {
+    background: rgba(255, 248, 236, .72);
+    color: #454b2c;
+    border: 1px solid rgba(91, 92, 55, .2);
+    border-radius: 8px;
+    padding: 9px 14px;
+  }
+  .btn-secondary:hover:not(:disabled), .btn-ghost:hover:not(:disabled) { background: #fff8ed; border-color: rgba(91, 92, 55, .34); }
+  .btn-ghost.active { border-color: #b86438; color: #a9532f; background: rgba(184, 100, 56, .12); }
+  .btn-danger { color: #9b3b31; background: rgba(155, 59, 49, .08); border-color: rgba(155, 59, 49, .22); }
   .btn-small { padding: 6px 10px; font-size: 12px; font-weight: 800; }
-  .feedback { border-radius: 10px; padding: 12px 14px; margin-bottom: 18px; font-weight: 700; }
-  .feedback.success { color: #00e676; background: rgba(0,230,118,.1); border: 1px solid rgba(0,230,118,.25); }
-  .feedback.error { color: #ff4d6d; background: rgba(255,77,109,.12); border: 1px solid rgba(255,77,109,.25); }
-  .feedback-title { color: #ff6b86; margin-bottom: 4px; }
-  .feedback-text { color: #f3a6b6; font-weight: 500; }
+  .feedback { border-radius: 8px; padding: 12px 14px; margin-bottom: 18px; font-weight: 700; }
+  .feedback.success { color: #43512e; background: rgba(88, 104, 57, .12); border: 1px solid rgba(88, 104, 57, .25); }
+  .feedback.error { color: #9b3b31; background: rgba(155, 59, 49, .1); border: 1px solid rgba(155, 59, 49, .24); }
+  .feedback-title { color: #9b3b31; margin-bottom: 4px; }
+  .feedback-text { color: #7b4c35; font-weight: 500; }
   .load-error { display: flex; align-items: center; justify-content: space-between; gap: 14px; flex-wrap: wrap; }
-  .panel, .table-wrap { background: #13161b; border: 1px solid rgba(255,255,255,.08); border-radius: 12px; }
+  .panel, .table-wrap {
+    background: rgba(255, 249, 238, .88);
+    border: 1px solid rgba(91, 92, 55, .16);
+    border-radius: 8px;
+    box-shadow: 0 18px 42px rgba(78, 58, 36, .08);
+  }
   .panel { padding: 22px; margin-bottom: 24px; }
   .panel.compact { max-width: 520px; }
-  .panel-title { font-size: 20px; font-weight: 800; margin-bottom: 18px; }
+  .panel-title { color: #454b2c; font-size: 20px; font-weight: 800; margin-bottom: 18px; }
   .form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 14px; }
-  label { display: grid; gap: 6px; color: #8a909a; font-size: 12px; font-weight: 800; text-transform: uppercase; letter-spacing: .06em; }
-  input, select { width: 100%; color: #e8eaed; background: #1a1e25; border: 1px solid rgba(255,255,255,.1); border-radius: 8px; padding: 10px 11px; outline: none; }
-  input:focus, select:focus { border-color: #00e676; box-shadow: 0 0 0 3px rgba(0,230,118,.14); }
-  input[readonly] { color: #8a909a; }
-  .hint { color: #00e676; font-size: 12px; font-weight: 800; margin-top: 6px; }
+  label { display: grid; gap: 6px; color: #6f6c52; font-size: 12px; font-weight: 800; text-transform: uppercase; letter-spacing: 0; }
+  input, select {
+    width: 100%;
+    color: #2b261d;
+    background: rgba(255, 252, 245, .9);
+    border: 1px solid rgba(91, 92, 55, .18);
+    border-radius: 8px;
+    padding: 10px 11px;
+    outline: none;
+  }
+  input:focus, select:focus { border-color: #b86438; box-shadow: 0 0 0 3px rgba(184, 100, 56, .13); }
+  input[readonly] { color: #7f785d; background: rgba(244, 235, 220, .82); }
+  .hint { color: #5a6737; font-size: 12px; font-weight: 800; margin-top: 6px; }
   .actions, .filters, .section-header { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
   .actions { margin-top: 18px; }
   .filters { margin-bottom: 18px; }
   .search { max-width: 300px; }
   .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; margin-bottom: 24px; }
-  .stat { background: #13161b; border: 1px solid rgba(255,255,255,.08); border-radius: 12px; padding: 18px; }
-  .stat.primary { border-color: rgba(0,230,118,.35); }
-  .stat-label { color: #8a909a; font-size: 12px; font-weight: 800; text-transform: uppercase; letter-spacing: .06em; }
+  .stat {
+    background: rgba(255, 249, 238, .9);
+    border: 1px solid rgba(91, 92, 55, .16);
+    border-radius: 8px;
+    padding: 18px;
+    box-shadow: 0 14px 32px rgba(78, 58, 36, .07);
+  }
+  .stat.primary { border-color: rgba(184, 100, 56, .34); background: linear-gradient(180deg, rgba(255, 249, 238, .96), rgba(246, 232, 211, .9)); }
+  .stat-label { color: #6f6c52; font-size: 12px; font-weight: 800; text-transform: uppercase; letter-spacing: 0; }
   .stat-value { font-size: 36px; font-weight: 900; line-height: 1.1; margin-top: 6px; }
-  .chart { height: 320px; margin: 8px 0 24px; }
+  .chart {
+    height: 320px;
+    margin: 8px 0 24px;
+    padding: 14px 10px 8px;
+    background: rgba(255, 249, 238, .64);
+    border: 1px solid rgba(91, 92, 55, .12);
+    border-radius: 8px;
+  }
   .section-header { margin: 26px 0 12px; justify-content: space-between; }
-  .section-title { font-size: 19px; font-weight: 900; text-transform: uppercase; }
+  .section-title { color: #454b2c; font-size: 19px; font-weight: 900; text-transform: uppercase; letter-spacing: 0; }
   .section-meta { display: flex; gap: 8px; flex-wrap: wrap; }
-  .badge { display: inline-flex; align-items: center; gap: 4px; color: #8a909a; background: #22272f; border: 1px solid rgba(255,255,255,.08); border-radius: 999px; padding: 3px 10px; font-size: 12px; font-weight: 800; white-space: nowrap; }
-  .badge.top { color: #00e676; background: rgba(0,230,118,.1); border-color: rgba(0,230,118,.28); }
-  .badge.out { color: #cbd1da; background: rgba(255,255,255,.06); }
-  .badge.warning { color: #ffd166; background: rgba(255,209,102,.1); border-color: rgba(255,209,102,.25); }
-  .badge.manual { color: #ffd166; background: rgba(255,209,102,.14); border-color: rgba(255,209,102,.32); }
-  .badge.danger { color: #ff6b86; background: rgba(255,77,109,.12); border-color: rgba(255,77,109,.25); }
-  .badge.history { color: #aeb4bd; background: rgba(174,180,189,.08); }
+  .badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    color: #6f6c52;
+    background: rgba(244, 235, 220, .82);
+    border: 1px solid rgba(91, 92, 55, .12);
+    border-radius: 999px;
+    padding: 3px 10px;
+    font-size: 12px;
+    font-weight: 800;
+    white-space: nowrap;
+  }
+  .badge.top { color: #45522f; background: rgba(88, 104, 57, .13); border-color: rgba(88, 104, 57, .24); }
+  .badge.out { color: #6f6c52; background: rgba(244, 235, 220, .82); }
+  .badge.warning, .badge.upcoming { color: #9a5a2f; background: rgba(184, 100, 56, .12); border-color: rgba(184, 100, 56, .24); }
+  .badge.manual { color: #9a5a2f; background: rgba(221, 174, 111, .22); border-color: rgba(184, 100, 56, .28); }
+  .badge.danger { color: #963d32; background: rgba(150, 61, 50, .1); border-color: rgba(150, 61, 50, .22); }
+  .badge.history { color: #6f6c52; background: rgba(111, 108, 82, .1); }
   .table-wrap { overflow-x: auto; margin-bottom: 24px; }
   table { width: 100%; border-collapse: collapse; }
-  th, td { padding: 12px 14px; text-align: left; white-space: nowrap; border-bottom: 1px solid rgba(255,255,255,.08); }
-  th { color: #8a909a; font-size: 12px; text-transform: uppercase; letter-spacing: .06em; background: #1a1e25; }
+  th, td { padding: 12px 14px; text-align: left; white-space: nowrap; border-bottom: 1px solid rgba(91, 92, 55, .12); }
+  th { color: #6f6c52; font-size: 12px; text-transform: uppercase; letter-spacing: 0; background: rgba(239, 228, 209, .88); }
   tr:last-child td { border-bottom: 0; }
-  .manual-row td { background: rgba(255,209,102,.045); }
-  .manual-row td:first-child { box-shadow: inset 3px 0 0 #ffd166; }
-  .dim { color: #8a909a; }
-  .points { color: #00e676; font-weight: 900; }
-  .points-out { color: #8a909a; font-weight: 800; }
-  .points-lost { color: #ff4d6d; font-weight: 900; }
-  .cat { display: inline-block; min-width: 34px; border-radius: 6px; padding: 2px 8px; text-align: center; background: #22272f; font-weight: 900; font-size: 12px; }
+  tbody tr:hover td { background: rgba(255, 255, 255, .28); }
+  .manual-row td { background: rgba(221, 174, 111, .12); }
+  .manual-row td:first-child { box-shadow: inset 3px 0 0 #b86438; }
+  .dim { color: #716b56; }
+  .points { color: #4e6136; font-weight: 900; }
+  .points-out { color: #716b56; font-weight: 800; }
+  .points-lost { color: #9b3b31; font-weight: 900; }
+  .cat { display: inline-block; min-width: 34px; border-radius: 6px; padding: 2px 8px; text-align: center; color: #454b2c; background: rgba(88, 104, 57, .1); font-weight: 900; font-size: 12px; }
   .row-badges, .row-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-  .empty { padding: 32px; color: #8a909a; text-align: center; }
+  .empty { padding: 32px; color: #716b56; text-align: center; }
   @media (max-width: 760px) {
     .header { align-items: flex-start; flex-direction: column; }
     .header-actions, .sync-status { justify-content: flex-start; text-align: left; }
@@ -140,7 +227,7 @@ function Stat({ label, value, primary, danger }) {
   return (
     <div className={`stat ${primary ? "primary" : ""}`}>
       <div className="stat-label">{label}</div>
-      <div className="stat-value" style={{ color: primary ? "#00e676" : danger ? "#ff4d6d" : undefined }}>{value}</div>
+      <div className="stat-value" style={{ color: primary ? "#4e6136" : danger ? "#9b3b31" : undefined }}>{value}</div>
     </div>
   );
 }
@@ -150,6 +237,7 @@ function RowBadges({ tournament, topRows, kind }) {
   let status;
 
   if (kind === "current") status = <span className="badge warning">mois courant</span>;
+  else if (kind === "upcoming") status = <span className="badge upcoming">a venir</span>;
   else if (kind === "expiring") status = <span className="badge danger">expire ce mois</span>;
   else if (kind === "history") status = <span className="badge history">historique</span>;
   else if (isTop12) status = <span className="badge top">top 12</span>;
@@ -415,19 +503,14 @@ export default function App() {
 
   const currentMonth = now.getMonth();
   const currentYear = now.getFullYear();
-  const startWindow = new Date(currentYear, currentMonth - 11, 1);
-
-  const actifs = tournois.filter(t => parseDate(t.date) >= startWindow);
-  const tournoisMoisCourant = tournois.filter(t => {
-    const d = parseDate(t.date);
-    return d.getFullYear() === currentYear && d.getMonth() === currentMonth;
-  });
-  const actifsClassement = actifs.filter(t => !tournoisMoisCourant.includes(t));
-  const tournoisExpirants = tournois.filter(t => {
-    const d = parseDate(t.date);
-    return d.getMonth() === currentMonth && d.getFullYear() === currentYear - 1;
-  });
-  const historique = tournois.filter(t => parseDate(t.date) < startWindow && !tournoisExpirants.includes(t));
+  const today = new Date(currentYear, currentMonth, now.getDate());
+  const {
+    actifsClassement,
+    tournoisMoisCourant,
+    tournoisExpirants,
+    historique,
+    tournoisAVenir,
+  } = getDashboardBuckets(tournois, now);
 
   const filtered = actifsClassement.filter(t => {
     const matchesCategory = categorie === "all" || t.categorie === categorie;
@@ -466,11 +549,14 @@ export default function App() {
     const start = startOfMonth(addMonths(now, -11));
     return Array.from({ length: 24 }, (_, i) => {
       const date = addMonths(start, i);
-      return { date, label: format(date, "MMM yyyy") };
+      return { date, label: formatMonthLabel(date) };
     });
   }, [now]);
 
-  const normalized = useMemo(() => normalizeTournois(tournois), [tournois]);
+  const normalized = useMemo(
+    () => normalizeTournois(tournois.filter(t => parseDate(t.date) <= today)),
+    [tournois, today]
+  );
   const chartData = useMemo(() => buildChartData(months, normalized, now), [months, normalized, now]);
   const tranchesDisponibles = TRANCHES[form.type] || [];
   const pointsPreview = form.type && form.tranche && form.classement
@@ -626,8 +712,8 @@ export default function App() {
             <XAxis dataKey="month" interval={2} />
             <YAxis />
             <Tooltip />
-            <Line type="monotone" dataKey="real" stroke="#00e676" strokeWidth={3} dot connectNulls={false} />
-            <Line type="monotone" dataKey="projected" stroke="#00e676" strokeDasharray="6 6" strokeWidth={2} dot={false} connectNulls={false} />
+            <Line type="monotone" dataKey="real" stroke="#4e6136" strokeWidth={3} dot connectNulls={false} />
+            <Line type="monotone" dataKey="projected" stroke="#b86438" strokeDasharray="6 6" strokeWidth={2} dot={false} connectNulls={false} />
           </LineChart>
         </ResponsiveContainer>
       </div>
@@ -649,6 +735,16 @@ export default function App() {
             <div className="section-meta"><span className="badge">{sorted.length} resultats</span><span className="badge top">{meilleurs.length} top 12</span></div>
           </div>
           <TournamentTable rows={sorted} topRows={meilleurs} kind="active" canManage={isAdmin} onEdit={startEdit} onDelete={deleteTournament} deletingId={deletingId} />
+
+          {tournoisAVenir.length > 0 && (
+            <>
+              <div className="section-header">
+                <div className="section-title">Tournois a venir</div>
+                <div className="section-meta"><span className="badge upcoming">{tournoisAVenir.length}</span></div>
+              </div>
+              <TournamentTable rows={[...tournoisAVenir].sort((a, b) => parseDate(a.date) - parseDate(b.date))} kind="upcoming" canManage={isAdmin} onEdit={startEdit} onDelete={deleteTournament} deletingId={deletingId} />
+            </>
+          )}
 
           {tournoisExpirants.length > 0 && (
             <>
