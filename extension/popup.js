@@ -48,7 +48,7 @@ syncButton.addEventListener("click", async () => {
 
   const result = response.result || {};
   setStatus(
-    `Synchronise : ${result.imported || 0} importes, ${result.skipped || 0} ignores.`,
+    `Synchronise : ${result.imported || 0} importes, ${result.updated || 0} remplaces, ${result.skipped || 0} ignores.`,
     "success"
   );
 });
