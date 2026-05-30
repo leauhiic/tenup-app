@@ -1,5 +1,6 @@
 import {
   computeTop12Total,
+  getDashboardBuckets,
   getPoints,
   getValidite,
   normalizeTournois,
@@ -28,4 +29,16 @@ test("keeps only the best 12 scores for ranking totals", () => {
   );
 
   expect(computeTop12Total(tournois)).toBe(90);
+});
+
+test("keeps future tournaments out of the active ranking bucket", () => {
+  const buckets = getDashboardBuckets([
+    { nom: "Ancien score", date: "15/07/2025", point: 108 },
+    { nom: "Score du mois", date: "24/05/2026", point: 63 },
+    { nom: "Tournoi futur", date: "25/06/2026", point: 188 },
+  ], new Date(2026, 4, 30));
+
+  expect(buckets.actifsClassement.map(t => t.nom)).toEqual(["Ancien score"]);
+  expect(buckets.tournoisMoisCourant.map(t => t.nom)).toEqual(["Score du mois"]);
+  expect(buckets.tournoisAVenir.map(t => t.nom)).toEqual(["Tournoi futur"]);
 });
