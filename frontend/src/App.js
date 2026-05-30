@@ -24,6 +24,7 @@ const EMPTY_FORM = {
   classement: "",
   point: "",
   validite: "",
+  manuel: true,
 };
 
 const GLOBAL_CSS = `
@@ -78,6 +79,7 @@ const GLOBAL_CSS = `
   .badge.top { color: #00e676; background: rgba(0,230,118,.1); border-color: rgba(0,230,118,.28); }
   .badge.out { color: #cbd1da; background: rgba(255,255,255,.06); }
   .badge.warning { color: #ffd166; background: rgba(255,209,102,.1); border-color: rgba(255,209,102,.25); }
+  .badge.manual { color: #ffd166; background: rgba(255,209,102,.14); border-color: rgba(255,209,102,.32); }
   .badge.danger { color: #ff6b86; background: rgba(255,77,109,.12); border-color: rgba(255,77,109,.25); }
   .badge.history { color: #aeb4bd; background: rgba(174,180,189,.08); }
   .table-wrap { overflow-x: auto; margin-bottom: 24px; }
@@ -85,6 +87,8 @@ const GLOBAL_CSS = `
   th, td { padding: 12px 14px; text-align: left; white-space: nowrap; border-bottom: 1px solid rgba(255,255,255,.08); }
   th { color: #8a909a; font-size: 12px; text-transform: uppercase; letter-spacing: .06em; background: #1a1e25; }
   tr:last-child td { border-bottom: 0; }
+  .manual-row td { background: rgba(255,209,102,.045); }
+  .manual-row td:first-child { box-shadow: inset 3px 0 0 #ffd166; }
   .dim { color: #8a909a; }
   .points { color: #00e676; font-weight: 900; }
   .points-out { color: #8a909a; font-weight: 800; }
@@ -143,12 +147,20 @@ function Stat({ label, value, primary, danger }) {
 
 function RowBadges({ tournament, topRows, kind }) {
   const isTop12 = topRows.includes(tournament);
+  let status;
 
-  if (kind === "current") return <span className="badge warning">mois courant</span>;
-  if (kind === "expiring") return <span className="badge danger">expire ce mois</span>;
-  if (kind === "history") return <span className="badge history">historique</span>;
-  if (isTop12) return <span className="badge top">top 12</span>;
-  return <span className="badge out">hors top 12</span>;
+  if (kind === "current") status = <span className="badge warning">mois courant</span>;
+  else if (kind === "expiring") status = <span className="badge danger">expire ce mois</span>;
+  else if (kind === "history") status = <span className="badge history">historique</span>;
+  else if (isTop12) status = <span className="badge top">top 12</span>;
+  else status = <span className="badge out">hors top 12</span>;
+
+  return (
+    <>
+      {tournament.manuel === true && <span className="badge manual">en attente FFT</span>}
+      {status}
+    </>
+  );
 }
 
 function TournamentTable({ rows, topRows = [], kind = "active", onEdit, onDelete, canManage = false, deletingId = null }) {
@@ -175,7 +187,7 @@ function TournamentTable({ rows, topRows = [], kind = "active", onEdit, onDelete
           {rows.map((t, index) => {
             const isTop12 = topRows.includes(t);
             return (
-              <tr key={t.id || `${t.date}-${t.nom}-${index}`}>
+              <tr key={t.id || `${t.date}-${t.nom}-${index}`} className={t.manuel === true ? "manual-row" : ""}>
                 <td className="dim">{t.date}</td>
                 <td>{t.nom}</td>
                 <td><div className="row-badges"><RowBadges tournament={t} topRows={topRows} kind={kind} /></div></td>
@@ -366,6 +378,7 @@ export default function App() {
       classement: String(tournament.classement || ""),
       point: String(tournament.point || ""),
       validite: tournament.validite || "",
+      manuel: tournament.manuel === true,
     });
     setShowForm(true);
     setFeedback(null);
@@ -498,6 +511,7 @@ export default function App() {
           classement: parseInt(form.classement, 10),
           point: parseInt(form.point, 10),
           validite: form.validite,
+          manuel: editingId ? form.manuel === true : true,
         }),
       });
 
