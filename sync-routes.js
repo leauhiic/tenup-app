@@ -10,6 +10,7 @@ module.exports = function registerSyncRoutes(app, helpers) {
     requireAdmin,
     validateTournoiPayload,
     insertTournoiIfMissing,
+    ensureTournoisSchema,
     getDb,
     cleanText
   } = helpers;
@@ -78,7 +79,7 @@ module.exports = function registerSyncRoutes(app, helpers) {
     const errors = [];
 
     rows.forEach((row, index) => {
-      const validation = validateTournoiPayload(row);
+      const validation = validateTournoiPayload({ ...row, manuel: false });
       if (validation.error) {
         errors.push({ index, error: validation.error });
         return;
@@ -102,18 +103,24 @@ module.exports = function registerSyncRoutes(app, helpers) {
     }
 
     try {
+      await ensureTournoisSchema();
+
       if (replace) {
         await getDb().query("TRUNCATE TABLE tournois RESTART IDENTITY");
       }
 
       let imported = 0;
+      let updated = 0;
       for (const tournoi of values) {
-        if (await insertTournoiIfMissing(tournoi)) {
+        const result = await insertTournoiIfMissing(tournoi, { imported: true });
+        if (result === "inserted") {
           imported += 1;
+        } else if (result === "updated") {
+          updated += 1;
         }
       }
 
-      const skipped = values.length - imported;
+      const skipped = values.length - imported - updated;
       await recordSyncRun({
         source,
         status: "success",
@@ -121,13 +128,14 @@ module.exports = function registerSyncRoutes(app, helpers) {
         imported,
         skipped,
         message: replace ? "Import completed with replacement" : "Import completed",
-        details: { replace }
+        details: { replace, updated }
       });
 
       res.json({
         message: "Import reussi",
         received: values.length,
         imported,
+        updated,
         skipped,
         replaced: replace
       });
