@@ -963,15 +963,6 @@ export default function App() {
     (sum, t) => sum + Number(t.point || 0),
     0,
   );
-  const poolSimule = [
-    ...actifsClassement.filter((t) => !tournoisExpirants.includes(t)),
-    ...tournoisMoisCourant,
-  ];
-  const pointsSimules = [...poolSimule]
-    .sort((a, b) => Number(b.point || 0) - Number(a.point || 0))
-    .slice(0, 12)
-    .reduce((sum, t) => sum + Number(t.point || 0), 0);
-
   const months = useMemo(() => {
     const start = startOfMonth(addMonths(now, -11));
     return Array.from({ length: 24 }, (_, i) => {
@@ -985,6 +976,9 @@ export default function App() {
     () => buildChartData(months, normalized, now),
     [months, normalized, now],
   );
+  const nextMonthLabel = formatMonthLabel(startOfMonth(addMonths(now, 1)));
+  const pointsSimules =
+    chartData.find((point) => point.month === nextMonthLabel)?.simule ?? 0;
   const tranchesDisponibles = TRANCHES[form.type] || [];
   const pointsPreview =
     form.type && form.tranche && form.classement
