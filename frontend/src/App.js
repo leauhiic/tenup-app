@@ -971,7 +971,6 @@ export default function App() {
     .sort((a, b) => Number(b.point || 0) - Number(a.point || 0))
     .slice(0, 12)
     .reduce((sum, t) => sum + Number(t.point || 0), 0);
-  const deltaPoints = pointsSimules - totalPoints;
 
   const months = useMemo(() => {
     const start = startOfMonth(addMonths(now, -11));
@@ -1288,10 +1287,10 @@ export default function App() {
         <Stat label="Meilleur score" value={bestScore} />
         <Stat label="Moy. Top 12" value={moyennePoints} />
         <Stat
-          label="Simule"
-          value={`${deltaPoints >= 0 ? "+" : ""}${deltaPoints}`}
-          primary={deltaPoints >= 0}
-          danger={deltaPoints < 0}
+          label="Classement simule"
+          value={pointsSimules}
+          primary={pointsSimules >= totalPoints}
+          danger={pointsSimules < totalPoints}
         />
       </section>
 
