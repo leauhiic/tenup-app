@@ -35,6 +35,7 @@ test("keeps only the best 12 scores for ranking totals", () => {
 test("keeps future tournaments out of the active ranking bucket", () => {
   const buckets = getDashboardBuckets(
     [
+      { nom: "Expire fin mois", date: "05/05/2025", point: 45 },
       { nom: "Ancien score", date: "15/07/2025", point: 108 },
       { nom: "Score du mois", date: "24/05/2026", point: 63 },
       { nom: "Tournoi futur", date: "25/06/2026", point: 188 },
@@ -42,14 +43,20 @@ test("keeps future tournaments out of the active ranking bucket", () => {
     new Date(2026, 4, 30),
   );
 
-  expect(buckets.actifsClassement.map((t) => t.nom)).toEqual(["Ancien score"]);
+  expect(buckets.actifsClassement.map((t) => t.nom)).toEqual([
+    "Expire fin mois",
+    "Ancien score",
+  ]);
+  expect(buckets.tournoisExpirants.map((t) => t.nom)).toEqual([
+    "Expire fin mois",
+  ]);
   expect(buckets.tournoisMoisCourant.map((t) => t.nom)).toEqual([
     "Score du mois",
   ]);
   expect(buckets.tournoisAVenir.map((t) => t.nom)).toEqual(["Tournoi futur"]);
 });
 
-test("starts simulated ranking data at next month", () => {
+test("keeps current month in simulated ranking for line continuity", () => {
   const now = new Date(2026, 4, 30);
   const months = [
     { date: new Date(2026, 4, 1), label: "mai 2026" },
@@ -57,14 +64,17 @@ test("starts simulated ranking data at next month", () => {
     { date: new Date(2026, 6, 1), label: "juil. 2026" },
   ];
   const tournois = normalizeTournois([
+    { date: "15/07/2025", point: 108 },
     { date: "24/05/2026", point: 63 },
     { date: "25/06/2026", point: 188 },
   ]);
 
   const data = buildChartData(months, tournois, now);
 
-  expect(data[0].simule).toBeNull();
-  expect(data[1].simule).toBe(63);
-  expect(data[2].simule).toBe(251);
+  expect(data[0].real).toBe(108);
+  expect(data[0].simule).toBe(108);
+  expect(data[1].real).toBeNull();
+  expect(data[1].simule).toBe(171);
+  expect(data[2].simule).toBe(359);
   expect(data[0].projected).toBeUndefined();
 });

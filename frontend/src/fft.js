@@ -94,7 +94,7 @@ export function getDashboardBuckets(tournois, now = new Date()) {
   const currentMonth = now.getMonth();
   const currentYear = now.getFullYear();
   const today = new Date(currentYear, currentMonth, now.getDate());
-  const startWindow = new Date(currentYear, currentMonth - 11, 1);
+  const startWindow = new Date(currentYear - 1, currentMonth, 1);
 
   const dated = tournois.map((t) => ({ tournoi: t, date: parseDate(t.date) }));
   const completed = dated.filter(({ date }) => date <= today);
@@ -162,7 +162,7 @@ export function buildChartData(months, normalizedTournois, now) {
       (t) => t.dateObj >= start && t.dateObj <= end,
     );
     const total = computeTop12Total(pool);
-    const showSimule = month.date >= startOfMonth(addMonths(now, 1));
+    const showSimule = month.date >= startOfMonth(now);
 
     return {
       month: month.label,
