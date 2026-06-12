@@ -1,1 +1,48 @@
--
+<!doctype html>
+<html lang="fr">
+  <head>
+    <meta charset="utf-8" />
+    <title>TenUp Sync</title>
+    <link rel="stylesheet" href="popup.css" />
+  </head>
+  <body>
+    <main>
+      <header>
+        <div class="brand">TEN<span>UP</span></div>
+        <div class="subtitle">Sync extension</div>
+      </header>
+
+      <form id="settings-form">
+        <p id="target-summary" class="hint">Chargement des IDs TenUp...</p>
+        <p class="hint">
+          Les IDs sont lus depuis les comptes valides du dashboard. Connecte-toi
+          une seule fois a TenUp, puis l'extension synchronise chaque classement
+          a la suite.
+        </p>
+
+        <label class="check">
+          <input id="auto-sync" name="autoSyncEnabled" type="checkbox" />
+          <span>Verifier automatiquement le 7 du mois</span>
+        </label>
+
+        <div class="actions">
+          <button id="save" type="submit">Enregistrer</button>
+          <button id="open-tenup" type="button" class="secondary">
+            Ouvrir TenUp
+          </button>
+        </div>
+      </form>
+
+      <button id="test-read" type="button" class="secondary wide">
+        Tester le premier ID
+      </button>
+      <button id="sync-now" type="button" class="primary">
+        Synchroniser tous les IDs
+      </button>
+
+      <section id="status" class="status muted">Chargement...</section>
+    </main>
+
+    <script src="popup.js"></script>
+  </body>
+</html>
