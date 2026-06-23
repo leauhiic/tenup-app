@@ -1,7 +1,7 @@
 {
   "version": 2,
-  "buildCommand": "cd frontend && npm install && CI=false npm run build",
-  "outputDirectory": "frontend/build",
+  "buildCommand": "if [ -d frontend ]; then cd frontend && npm install && CI=false npm run build && cd .. && rm -rf build && cp -R frontend/build build; else npm install && CI=false npm run build; fi",
+  "outputDirectory": "build",
   "functions": {
     "api/**/*.js": {
       "maxDuration": 30
