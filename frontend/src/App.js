@@ -21,7 +21,7 @@ import {
 
 const API =
   process.env.REACT_APP_API_URL ||
-  "https://tenup-app-production.up.railway.app";
+  "/api";
 const LOGO = "/logo-petit.png";
 const AUTH_TOKEN_KEY = "tenupUserToken";
 const AUTH_EXPIRES_KEY = "tenupUserExpiresAt";

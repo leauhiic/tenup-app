@@ -54,6 +54,11 @@ app.use(
   }),
 );
 app.use(express.json());
+app.use((req, res, next) => {
+  if (req.url === "/api") req.url = "/";
+  else if (req.url.startsWith("/api/")) req.url = req.url.slice(4);
+  next();
+});
 
 const seedData = require("./tournois-202605.json");
 const CATEGORIES = new Set(["DM", "DD", "DX"]);
@@ -1012,8 +1017,12 @@ function listen(port) {
   });
 }
 
-listen(PORT);
+if (require.main === module) {
+  listen(PORT);
 
-if (String(PORT) !== "3000") {
-  listen(3000);
+  if (String(PORT) !== "3000") {
+    listen(3000);
+  }
 }
+
+module.exports = app;

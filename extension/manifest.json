@@ -6,7 +6,7 @@
   "permissions": ["alarms", "scripting", "storage", "tabs"],
   "host_permissions": [
     "https://tenup.fft.fr/*",
-    "https://tenup-app-production.up.railway.app/*"
+    "https://tenup-app.vercel.app/*"
   ],
   "background": {
     "service_worker": "background.js"

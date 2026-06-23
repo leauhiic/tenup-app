@@ -6,11 +6,11 @@ Dashboard personnel pour suivre des resultats de padel TenUp/FFT, calculer le to
 
 - Backend : Node.js, Express, PostgreSQL
 - Frontend : React, Recharts, date-fns
-- Deploiement prevu : API sur Railway, frontend statique sur Vercel
+- Deploiement : frontend et API Express sur Vercel, base PostgreSQL sur Supabase
 
 ## Securite
 
-Ne commit jamais de fichier `.env`. Le depot contenait auparavant des secrets en clair : ils doivent etre revoques et remplaces cote TenUp/Railway avant de redeployer.
+Ne commit jamais de fichier `.env`. Les secrets Railway doivent etre remplaces par les secrets Supabase/Vercel avant de redeployer.
 
 L'acces passe par des comptes utilisateur. Un compte cree depuis le frontend doit renseigner son `ID TenUp` et etre valide par un admin avant de pouvoir acceder a l'application.
 
@@ -27,7 +27,9 @@ npm start
 
 Variables :
 
-- `DATABASE_URL` : URL PostgreSQL.
+- `SUPABASE_DATABASE_URL` : URL PostgreSQL Supabase, prioritaire sur `DATABASE_URL`.
+- `RAILWAY_DATABASE_URL` : URL PostgreSQL Railway, seulement pour le script de migration de donnees.
+- `DATABASE_URL` : URL PostgreSQL legacy.
 - `ADMIN_EMAIL` : email du compte admin, `admin@tenup.local` par defaut.
 - `ADMIN_NAME` : nom du compte admin, `Loic Vossier` par defaut.
 - `ADMIN_TENUP_ID` : ID TenUp rattache au compte admin, `7146157482` par defaut.
@@ -36,6 +38,28 @@ Variables :
 - `ADMIN_API_KEY` : cle legacy pour scripts/admin API directs.
 - `CORS_ORIGINS` : origines autorisees separees par des virgules, par exemple `http://localhost:3001,https://app.example`.
 - `PORT` : port HTTP, `3000` par defaut.
+
+## Migration Railway vers Supabase
+
+Le schema Supabase est versionne dans `supabase/migrations/20260623000000_tenup_app_initial_schema.sql`.
+
+La migration appliquee cree :
+
+- `public.users`
+- `public.tournois`
+- `public.sync_runs`
+
+Les tables ont RLS active et ne sont pas exposees aux roles `anon`/`authenticated`; l'application y accede via l'API serveur.
+
+Pour copier les donnees Railway vers Supabase :
+
+```bash
+RAILWAY_DATABASE_URL="postgres://..." \
+SUPABASE_DATABASE_URL="postgres://postgres.zczchnkayfyksmtkugxn:...@aws-0-eu-north-1.pooler.supabase.com:6543/postgres" \
+npm run migrate:railway-to-supabase
+```
+
+La base cible est tronquee table par table avant copie. Lance ce script seulement quand l'URL Railway source est certaine.
 
 Routes :
 
@@ -65,19 +89,28 @@ curl -X POST http://localhost:3000/init-db \
   -H "x-api-key: $ADMIN_API_KEY"
 ```
 
-## Frontend
+## Vercel
 
-Creer `frontend/.env` a partir de `frontend/.env.example`.
+Le projet Vercel doit etre deploye depuis la racine du repo, pas depuis `frontend`.
+
+Variables Vercel a definir en production :
+
+- `SUPABASE_DATABASE_URL`
+- `ADMIN_PASSWORD`
+- `ADMIN_TOKEN_SECRET`
+- `ADMIN_EMAIL`
+- `ADMIN_NAME`
+- `ADMIN_TENUP_ID`
+- `CORS_ORIGINS=https://tenup-app.vercel.app`
 
 ```bash
+npm install
 cd frontend
 npm install
-npm start
+npm run build
 ```
 
-Variables :
-
-- `REACT_APP_API_URL` : URL de l'API, par defaut l'API Railway historique.
+Le frontend appelle `/api` par defaut. En local, `frontend/.env` peut definir `REACT_APP_API_URL=http://localhost:3000`.
 
 L'interface affiche un etat de chargement, un bouton de rafraichissement, la derniere synchronisation reussie, les actions admin modifier/supprimer et des badges de statut : top 12, hors top 12, mois courant, expire ce mois et historique.
 
@@ -100,5 +133,5 @@ npm test -- --watchAll=false
 
 - Les dates sont normalisees cote API et stockees comme `DATE`.
 - Le backend refuse les categories hors `DM`, `DD`, `DX`.
-- Le Dockerfile installe seulement les dependances runtime de l'API. Le script Playwright `login-once.js` reste disponible en local via `npm run login:tenup`.
+- Le script Playwright `login-once.js` reste disponible en local via `npm run login:tenup`.
 - La synchro TenUp via Chrome est documentee dans `docs/tenup-sync.md`.

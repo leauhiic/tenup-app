@@ -1,12 +1,14 @@
 const { Pool } = require("pg");
 
 const config = {};
+const connectionString =
+  process.env.SUPABASE_DATABASE_URL || process.env.DATABASE_URL;
 
-if (process.env.DATABASE_URL) {
-  config.connectionString = process.env.DATABASE_URL;
+if (connectionString) {
+  config.connectionString = connectionString;
 }
 
-if (process.env.PGSSL === "true") {
+if (process.env.PGSSL === "true" || /supabase\.(co|com)/i.test(connectionString || "")) {
   config.ssl = { rejectUnauthorized: false };
 }
 

@@ -4,7 +4,8 @@
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
-    "login:tenup": "node login-once.js"
+    "login:tenup": "node login-once.js",
+    "migrate:railway-to-supabase": "node scripts/migrate-railway-to-supabase.js"
   },
   "engines": {
     "node": ">=18"

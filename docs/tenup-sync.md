@@ -13,7 +13,7 @@ TenUp bloque les navigateurs automatises. La synchronisation passe donc par une 
 
 ## Pre-requis
 
-- L'API doit etre redeployee pour exposer `GET /sync/tenup-ids` et `POST /tournois/import/tenup`.
+- L'API Vercel doit etre redeployee pour exposer `GET /api/sync/tenup-ids` et `POST /api/tournois/import/tenup`.
 - Ton compte dashboard doit etre cree avec le meme `ID TenUp` puis valide par un admin.
 - Chrome doit etre installe.
 
@@ -60,10 +60,10 @@ Limites importantes :
 
 ## API ajoutee
 
-- `POST /tournois/import/tenup` : importe une liste de tournois sans doublons et rattache les lignes au compte valide qui porte le meme `ID TenUp`.
-- `GET /sync/tenup-ids` : retourne les IDs TenUp des comptes valides a synchroniser.
-- `POST /tournois/import` : route admin legacy, requiert `x-api-key` ou un jeton admin.
-- `GET /sync/status` : retourne la derniere synchronisation connue.
+- `POST /api/tournois/import/tenup` : importe une liste de tournois sans doublons et rattache les lignes au compte valide qui porte le meme `ID TenUp`.
+- `GET /api/sync/tenup-ids` : retourne les IDs TenUp des comptes valides a synchroniser.
+- `POST /api/tournois/import` : route admin legacy, requiert `x-api-key` ou un jeton admin.
+- `GET /api/sync/status` : retourne la derniere synchronisation connue.
 
 La route d'import accepte :
 

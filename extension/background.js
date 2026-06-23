@@ -1,7 +1,7 @@
 const DEFAULT_SETTINGS = {
   autoSyncEnabled: true,
 };
-const API_BASE_URL = "https://tenup-app-production.up.railway.app";
+const API_BASE_URL = "https://tenup-app.vercel.app/api";
 const MONTHLY_ALARM = "monthly-tenup-sync";
 const READ_SETTLE_DELAY_MS = 1200;
 const MISSING_RECEIVER_PATTERN =
