@@ -611,8 +611,6 @@ async function ensureDefaultAdminUser() {
      ON CONFLICT (email) DO UPDATE
        SET name = EXCLUDED.name,
            tenup_id = EXCLUDED.tenup_id,
-           password_hash = EXCLUDED.password_hash,
-           password_salt = EXCLUDED.password_salt,
            role = 'admin',
            approved = true,
            approved_at = COALESCE(users.approved_at, NOW())
