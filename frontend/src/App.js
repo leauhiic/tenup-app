@@ -712,6 +712,61 @@ function AdminUsersPanel({ users, loading, feedback, onRefresh, onApprove }) {
   );
 }
 
+function ProfilePanel({ user, form, saving, feedback, onChange, onSubmit }) {
+  return (
+    <section className="panel">
+      <div className="section-header">
+        <div>
+          <div className="section-title">Mon profil</div>
+          <div className="admin-note">
+            La licence FFT sert a relier automatiquement TenUp App et Padel Manager.
+          </div>
+        </div>
+        <button
+          className="btn-primary btn-small"
+          type="button"
+          onClick={onSubmit}
+          disabled={saving}
+        >
+          {saving ? "Enregistrement..." : "Enregistrer"}
+        </button>
+      </div>
+      {feedback && (
+        <div className={`feedback ${feedback.type}`}>{feedback.msg}</div>
+      )}
+      <div className="form-grid">
+        <label>
+          Nom
+          <input name="name" value={form.name} onChange={onChange} />
+        </label>
+        <label>
+          Email
+          <input value={user?.email || ""} readOnly />
+        </label>
+        <label>
+          ID TenUp
+          <input
+            name="tenupId"
+            value={form.tenupId}
+            onChange={onChange}
+            inputMode="numeric"
+          />
+        </label>
+        <label>
+          Licence FFT
+          <input
+            name="licence"
+            value={form.licence}
+            onChange={onChange}
+            inputMode="numeric"
+            placeholder="ex: 123456789"
+          />
+        </label>
+      </div>
+    </section>
+  );
+}
+
 export default function App() {
   const [tournois, setTournois] = useState([]);
   const [search, setSearch] = useState("");
@@ -747,6 +802,13 @@ export default function App() {
   const [selectedUserId, setSelectedUserId] = useState(null);
   const [accountMenuOpen, setAccountMenuOpen] = useState(false);
   const [adminFeedback, setAdminFeedback] = useState(null);
+  const [profileForm, setProfileForm] = useState({
+    name: "",
+    tenupId: "",
+    licence: "",
+  });
+  const [profileSaving, setProfileSaving] = useState(false);
+  const [profileFeedback, setProfileFeedback] = useState(null);
   const [now] = useState(() => new Date());
 
   const isAuthenticated = Boolean(
@@ -809,6 +871,15 @@ export default function App() {
       setAccountMenuOpen(false);
     }
   }, [authToken, authExpiresAt]);
+
+  useEffect(() => {
+    setProfileForm({
+      name: authUser?.name || "",
+      tenupId: authUser?.tenupId || "",
+      licence: authUser?.licence || "",
+    });
+    setProfileFeedback(null);
+  }, [authUser?.id, authUser?.name, authUser?.tenupId, authUser?.licence]);
 
   useEffect(() => {
     if (!isAdminUser) {
@@ -1318,6 +1389,46 @@ export default function App() {
     setAuthForm((f) => ({ ...f, [name]: value }));
   };
 
+  const handleProfileChange = (e) => {
+    const { name, value } = e.target;
+    setProfileForm((f) => ({ ...f, [name]: value }));
+  };
+
+  const saveProfile = async () => {
+    setProfileSaving(true);
+    setProfileFeedback(null);
+    try {
+      const res = await fetch(`${API}/auth/me`, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${authToken}`,
+        },
+        body: JSON.stringify(profileForm),
+      });
+
+      if (!res.ok)
+        throw new Error(await readApiError(res, "Profil impossible a mettre a jour."));
+
+      const data = await res.json();
+      storeSession(data);
+      setAuthToken(data.token);
+      setAuthExpiresAt(data.expiresAt);
+      setAuthUser(data.user);
+      setApprovedUsers((users) =>
+        users.map((user) => (user.id === data.user.id ? data.user : user)),
+      );
+      setProfileFeedback({ type: "success", msg: "Profil mis a jour." });
+    } catch (err) {
+      setProfileFeedback({
+        type: "error",
+        msg: err.message || "Profil impossible a mettre a jour.",
+      });
+    } finally {
+      setProfileSaving(false);
+    }
+  };
+
   if (!isAuthenticated) {
     return (
       <AuthScreen
@@ -1400,6 +1511,15 @@ export default function App() {
           </button>
         </div>
       )}
+
+      <ProfilePanel
+        user={authUser}
+        form={profileForm}
+        saving={profileSaving}
+        feedback={profileFeedback}
+        onChange={handleProfileChange}
+        onSubmit={saveProfile}
+      />
 
       {isAdminUser && (
         <AdminUsersPanel

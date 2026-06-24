@@ -14,7 +14,7 @@ TenUp bloque les navigateurs automatises. La synchronisation passe donc par une 
 ## Pre-requis
 
 - L'API Vercel doit etre redeployee pour exposer `GET /api/sync/tenup-ids` et `POST /api/tournois/import/tenup`.
-- Ton compte dashboard doit etre cree avec le meme `ID TenUp`, et si tu veux le lien avec Padel Manager, avec la meme licence FFT, puis valide par un admin.
+- Ton compte dashboard doit etre cree avec le meme `ID TenUp`, et si tu veux le lien avec Padel Manager, avec la meme licence FFT, puis valide par un admin. Pour un compte deja cree, renseigne la licence depuis `Mon profil`.
 - Chrome doit etre installe.
 
 ## Installer l'extension

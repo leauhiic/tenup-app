@@ -855,6 +855,52 @@ app.get("/auth/me", requireUser, (req, res) => {
   res.json({ user: req.user });
 });
 
+app.patch("/auth/me", requireUser, async (req, res) => {
+  const name = cleanText(req.body?.name || "", 80);
+  const tenupId = cleanTenupId(req.body?.tenupId || req.body?.tenup_id || "");
+  const licence = cleanLicence(req.body?.licence || req.body?.license || "");
+
+  if (!name) {
+    return res.status(400).json({ error: "name is required" });
+  }
+  if (tenupId && !/^\d{6,20}$/.test(tenupId)) {
+    return res.status(400).json({ error: "tenup id is invalid" });
+  }
+
+  try {
+    await ensureUsersSchema();
+    const result = await getDb().query(
+      `UPDATE users
+       SET name = $1,
+           tenup_id = NULLIF($2, ''),
+           licence = NULLIF($3, '')
+       WHERE id = $4
+       RETURNING id, email, name, tenup_id, licence, role, approved, created_at, approved_at`,
+      [name, tenupId, licence, req.user.id],
+    );
+
+    if (result.rowCount === 0) {
+      return res.status(404).json({ error: "User not found" });
+    }
+
+    const safeUser = serializeUser(result.rows[0]);
+    res.json({
+      user: safeUser,
+      token: createUserToken(safeUser),
+      expiresAt: new Date(Date.now() + TOKEN_TTL_MS).toISOString(),
+    });
+  } catch (err) {
+    if (err.code === "23505") {
+      return res
+        .status(409)
+        .json({ error: "Cet ID TenUp ou cette licence est deja utilise" });
+    }
+
+    console.error(err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 app.get("/admin/users", requireAdminUser, async (req, res) => {
   try {
     await ensureUsersSchema();
