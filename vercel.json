@@ -1,6 +1,6 @@
 {
   "version": 2,
-  "buildCommand": "if [ -d frontend ]; then cd frontend && npm install && CI=false npm run build && cd .. && rm -rf build && cp -R frontend/build build; else npm install && CI=false npm run build; fi",
+  "buildCommand": "if [ -d frontend ]; then npm install && cd frontend && npm install && CI=false npm run build && cd .. && rm -rf build && cp -R frontend/build build; else npm install && CI=false npm run build; fi",
   "outputDirectory": "build",
   "functions": {
     "api/**/*.js": {
