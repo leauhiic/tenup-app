@@ -45,6 +45,7 @@ const EMPTY_FORM = {
   type: "P250",
   tranche: "17-20",
   categorie: "DM",
+  licence: "",
   partenaire: "",
   classement: "",
   point: "",
@@ -56,6 +57,7 @@ const EMPTY_AUTH_FORM = {
   name: "",
   email: "",
   tenupId: "",
+  licence: "",
   password: "",
 };
 
@@ -409,6 +411,17 @@ function AuthScreen({
                   placeholder="ex: 7146157482"
                 />
               </label>
+              <label>
+                Licence FFT
+                <input
+                  name="licence"
+                  value={form.licence}
+                  onChange={onChange}
+                  inputMode="numeric"
+                  autoComplete="off"
+                  placeholder="ex: 123456789"
+                />
+              </label>
             </>
           )}
           <label>
@@ -503,7 +516,10 @@ function AccountSwitcher({
                   {user.name || user.email}
                 </span>
                 <span className="account-meta">
-                  {user.tenupId ? `ID TenUp ${user.tenupId}` : user.email}
+                  {[
+                    user.tenupId ? `ID TenUp ${user.tenupId}` : "",
+                    user.licence ? `Licence ${user.licence}` : "",
+                  ].filter(Boolean).join(" - ") || user.email}
                   {user.role === "admin" ? " - admin" : ""}
                 </span>
               </button>
@@ -566,6 +582,7 @@ function TournamentTable({
             <th>Tournoi</th>
             <th>Statut</th>
             <th>Cat.</th>
+            <th>Licence</th>
             <th>Partenaire</th>
             <th>Classement</th>
             <th>Points</th>
@@ -590,6 +607,7 @@ function TournamentTable({
                 <td>
                   <span className="cat">{t.categorie}</span>
                 </td>
+                <td className="dim">{t.licence || "-"}</td>
                 <td className="dim">{t.partenaire}</td>
                 <td className="dim">{t.classement}e</td>
                 <td>
@@ -663,6 +681,7 @@ function AdminUsersPanel({ users, loading, feedback, onRefresh, onApprove }) {
                 <th>Nom</th>
                 <th>Email</th>
                 <th>ID TenUp</th>
+                <th>Licence</th>
                 <th>Action</th>
               </tr>
             </thead>
@@ -672,6 +691,7 @@ function AdminUsersPanel({ users, loading, feedback, onRefresh, onApprove }) {
                   <td>{user.name}</td>
                   <td className="dim">{user.email}</td>
                   <td className="dim">{user.tenupId}</td>
+                  <td className="dim">{user.licence || "-"}</td>
                   <td>
                     <button
                       className="btn-primary btn-small"
@@ -964,6 +984,7 @@ export default function App() {
     const password = authForm.password;
     const name = authForm.name.trim();
     const tenupId = authForm.tenupId.trim();
+    const licence = authForm.licence.trim();
 
     if (
       !email ||
@@ -983,7 +1004,7 @@ export default function App() {
       const endpoint = authMode === "register" ? "register" : "login";
       const payload =
         authMode === "register"
-          ? { name, email, password, tenupId }
+          ? { name, email, password, tenupId, licence }
           : { email, password };
       const res = await fetch(`${API}/auth/${endpoint}`, {
         method: "POST",
@@ -1081,6 +1102,7 @@ export default function App() {
       date: toInputDate(tournament.date),
       nom: tournament.nom || "",
       categorie: tournament.categorie || "DM",
+      licence: tournament.licence || "",
       partenaire: tournament.partenaire || "",
       classement: String(tournament.classement || ""),
       point: String(tournament.point || ""),
@@ -1160,6 +1182,7 @@ export default function App() {
     const matchesSearch =
       !q ||
       t.nom?.toLowerCase().includes(q) ||
+      t.licence?.toLowerCase().includes(q) ||
       t.partenaire?.toLowerCase().includes(q);
     return matchesCategory && matchesSearch;
   });
@@ -1251,6 +1274,7 @@ export default function App() {
           date: form.date,
           nom: form.nom,
           categorie: form.categorie,
+          licence: form.licence,
           partenaire: form.partenaire,
           classement: parseInt(form.classement, 10),
           point: parseInt(form.point, 10),
@@ -1444,6 +1468,15 @@ export default function App() {
                   <option key={c}>{c}</option>
                 ))}
               </select>
+            </label>
+            <label>
+              Licence FFT
+              <input
+                name="licence"
+                value={form.licence}
+                onChange={handleChange}
+                placeholder="Licence du joueur"
+              />
             </label>
             <label>
               Partenaire *

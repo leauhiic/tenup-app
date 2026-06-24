@@ -8,13 +8,13 @@ TenUp bloque les navigateurs automatises. La synchronisation passe donc par une 
 2. L'extension recupere les IDs TenUp des comptes valides en base.
 3. Elle ouvre chaque page classement TenUp depuis cette session, ID par ID.
 4. Elle extrait les resultats detectables.
-5. Elle envoie les resultats avec l'`ID TenUp` en cours ; l'API les rattache au compte valide correspondant.
+5. Elle envoie les resultats avec l'`ID TenUp` en cours ; l'API les rattache au compte valide correspondant. Les imports serveur peuvent aussi etre rattaches par `licence`.
 6. Elle peut relancer une verification automatiquement le 7 du mois si Chrome est ouvert.
 
 ## Pre-requis
 
 - L'API Vercel doit etre redeployee pour exposer `GET /api/sync/tenup-ids` et `POST /api/tournois/import/tenup`.
-- Ton compte dashboard doit etre cree avec le meme `ID TenUp` puis valide par un admin.
+- Ton compte dashboard doit etre cree avec le meme `ID TenUp`, et si tu veux le lien avec Padel Manager, avec la meme licence FFT, puis valide par un admin.
 - Chrome doit etre installe.
 
 ## Installer l'extension
@@ -62,7 +62,7 @@ Limites importantes :
 
 - `POST /api/tournois/import/tenup` : importe une liste de tournois sans doublons et rattache les lignes au compte valide qui porte le meme `ID TenUp`.
 - `GET /api/sync/tenup-ids` : retourne les IDs TenUp des comptes valides a synchroniser.
-- `POST /api/tournois/import` : route admin legacy, requiert `x-api-key` ou un jeton admin.
+- `POST /api/tournois/import` : route admin serveur a serveur, requiert `x-api-key` ou un jeton admin et peut rattacher par `tenupId` ou par `licence`.
 - `GET /api/sync/status` : retourne la derniere synchronisation connue.
 
 La route d'import accepte :
@@ -71,11 +71,13 @@ La route d'import accepte :
 {
   "source": "tenup-extension",
   "tenupId": "7146157482",
+  "licence": "123456789",
   "tournois": [
     {
       "date": "2026-05-07",
       "nom": "Tournoi Padel",
       "categorie": "DM",
+      "licence": "123456789",
       "partenaire": "Nom Partenaire",
       "classement": 12,
       "point": 250,
