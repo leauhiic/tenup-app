@@ -653,6 +653,60 @@ async function findUserByTenupId(value) {
   return result.rows[0] ? serializeUser(result.rows[0]) : null;
 }
 
+function getScopeInput(req) {
+  const body =
+    req.body && typeof req.body === "object" && !Array.isArray(req.body)
+      ? req.body
+      : {};
+
+  return {
+    userId: parseId(
+      req.query.userId ||
+        req.query.user_id ||
+        body.userId ||
+        body.user_id,
+    ),
+    tenupId: cleanTenupId(
+      req.query.tenupId ||
+        req.query.tenup_id ||
+        body.tenupId ||
+        body.tenup_id ||
+        "",
+    ),
+  };
+}
+
+async function resolveScopedUser(req) {
+  if (!req.user) return null;
+  if (req.user.role !== "admin") return req.user;
+
+  const { userId, tenupId } = getScopeInput(req);
+  if (!userId && !tenupId) return req.user;
+
+  await ensureUsersSchema();
+  const result = await getDb().query(
+    `SELECT id, email, name, tenup_id, role, approved, created_at, approved_at
+     FROM users
+     WHERE approved = true
+       AND ($1::integer IS NULL OR id = $1::integer)
+       AND ($2::text = '' OR tenup_id = $2::text)
+     LIMIT 1`,
+    [userId, tenupId],
+  );
+
+  return result.rows[0] ? serializeUser(result.rows[0]) : null;
+}
+
+async function getScopedUserOrRespond(req, res) {
+  const user = await resolveScopedUser(req);
+  if (!user?.id) {
+    res.status(404).json({ error: "Compte cible introuvable" });
+    return null;
+  }
+
+  return user;
+}
+
 app.get("/", (req, res) => {
   res.json({ status: "ok", service: "tenup-api" });
 });
@@ -753,14 +807,15 @@ app.get("/admin/users", requireAdminUser, async (req, res) => {
   try {
     await ensureUsersSchema();
     const status = cleanText(req.query.status || "", 20);
-    const onlyPending = status === "pending";
     const result = await getDb().query(
       `SELECT id, email, name, tenup_id, role, approved, created_at, approved_at
        FROM users
-       WHERE role <> 'admin'
-         AND ($1::boolean = false OR approved = false)
-       ORDER BY created_at ASC`,
-      [onlyPending],
+       WHERE
+         ($1 = 'pending' AND role <> 'admin' AND approved = false)
+         OR ($1 = 'approved' AND approved = true)
+         OR ($1 NOT IN ('pending', 'approved') AND role <> 'admin')
+       ORDER BY role = 'admin' DESC, name ASC, created_at ASC`,
+      [status],
     );
 
     res.json({ users: result.rows.map(serializeUser) });
@@ -811,6 +866,9 @@ app.post("/init-db", requireAdmin, async (req, res) => {
 app.get("/tournois", requireUser, async (req, res) => {
   try {
     await ensureTournoisSchema();
+    const scopedUser = await getScopedUserOrRespond(req, res);
+    if (!scopedUser) return;
+
     const result = await getDb().query(
       `
       SELECT
@@ -839,7 +897,7 @@ app.get("/tournois", requireUser, async (req, res) => {
         END DESC,
         point DESC
     `,
-      [req.user.id],
+      [scopedUser.id],
     );
 
     res.json(result.rows);
@@ -857,8 +915,11 @@ app.post("/tournois", requireUser, async (req, res) => {
 
   try {
     await ensureTournoisSchema();
+    const scopedUser = await getScopedUserOrRespond(req, res);
+    if (!scopedUser) return;
+
     const result = await insertTournoiIfMissing(validation.value, {
-      userId: req.user.id,
+      userId: scopedUser.id,
     });
     if (result === "skipped") {
       return res.json({ message: "Tournoi deja existant", skipped: true });
@@ -883,6 +944,9 @@ app.put("/tournois/:id", requireUser, async (req, res) => {
 
   try {
     await ensureTournoisSchema();
+    const scopedUser = await getScopedUserOrRespond(req, res);
+    if (!scopedUser) return;
+
     const t = validation.value;
     const result = await getDb().query(
       `UPDATE tournois
@@ -898,7 +962,7 @@ app.put("/tournois/:id", requireUser, async (req, res) => {
         t.point,
         t.validite,
         t.manuel,
-        req.user.id,
+        scopedUser.id,
         id,
       ],
     );
@@ -920,9 +984,13 @@ app.delete("/tournois/:id", requireUser, async (req, res) => {
   }
 
   try {
+    await ensureTournoisSchema();
+    const scopedUser = await getScopedUserOrRespond(req, res);
+    if (!scopedUser) return;
+
     const result = await getDb().query(
       "DELETE FROM tournois WHERE id = $1 AND user_id = $2",
-      [id, req.user.id],
+      [id, scopedUser.id],
     );
     if (result.rowCount === 0) {
       return res.status(404).json({ error: "Tournament not found" });

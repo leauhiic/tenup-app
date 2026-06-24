@@ -91,6 +91,41 @@ const GLOBAL_CSS = `
   .logo span, .accent { color: #b86438; }
   .subtitle { color: #8a5a38; font-size: 13px; text-transform: uppercase; letter-spacing: 0; margin-top: 7px; font-weight: 700; }
   .user-chip { color: #6f6c52; font-size: 13px; font-weight: 700; padding: 9px 12px; border: 1px solid rgba(91, 92, 55, .16); border-radius: 8px; background: rgba(255, 248, 236, .72); }
+  .account-switcher { position: relative; }
+  .user-chip-button { display: inline-flex; align-items: center; gap: 8px; min-height: 38px; color: #454b2c; }
+  .user-chip-button:hover:not(:disabled) { background: #fff8ed; border-color: rgba(184, 100, 56, .34); }
+  .chip-caret { color: #a9532f; font-size: 11px; text-transform: uppercase; }
+  .account-menu {
+    position: absolute;
+    top: calc(100% + 8px);
+    right: 0;
+    z-index: 30;
+    width: min(320px, calc(100vw - 40px));
+    max-height: 360px;
+    overflow-y: auto;
+    padding: 8px;
+    background: rgba(255, 249, 238, .98);
+    border: 1px solid rgba(91, 92, 55, .18);
+    border-radius: 8px;
+    box-shadow: 0 18px 42px rgba(78, 58, 36, .18);
+  }
+  .account-menu-title { color: #6f6c52; font-size: 11px; font-weight: 900; text-transform: uppercase; padding: 7px 8px; }
+  .account-option {
+    width: 100%;
+    display: grid;
+    gap: 3px;
+    text-align: left;
+    color: #2b261d;
+    background: transparent;
+    border: 1px solid transparent;
+    border-radius: 8px;
+    padding: 9px 10px;
+  }
+  .account-option:hover { background: rgba(244, 235, 220, .68); }
+  .account-option.active { border-color: rgba(184, 100, 56, .32); background: rgba(184, 100, 56, .12); }
+  .account-name { font-weight: 900; }
+  .account-meta { color: #716b56; font-size: 12px; }
+  .account-menu-empty { color: #716b56; padding: 12px 10px; font-size: 13px; }
   .header-actions { display: flex; justify-content: flex-end; align-items: center; gap: 10px; flex-wrap: wrap; }
   .sync-status { color: #6f6c52; font-size: 12px; white-space: nowrap; width: 100%; text-align: right; }
   button, input, select { font: inherit; }
@@ -232,6 +267,7 @@ const GLOBAL_CSS = `
   @media (max-width: 760px) {
     .header { align-items: flex-start; flex-direction: column; }
     .header-actions, .sync-status { justify-content: flex-start; text-align: left; }
+    .account-menu { left: 0; right: auto; }
     .brand-mark { width: 62px; height: 42px; }
     .stat-value { font-size: 30px; }
     .filters { grid-template-columns: 1fr; }
@@ -412,6 +448,68 @@ function AuthScreen({
           </button>
         </div>
       </section>
+    </div>
+  );
+}
+
+function AccountSwitcher({
+  account,
+  accounts,
+  isAdmin,
+  loading,
+  open,
+  onToggle,
+  onSelect,
+}) {
+  const label = account?.name || account?.email || "Compte";
+
+  if (!isAdmin) {
+    return <span className="user-chip">{label}</span>;
+  }
+
+  return (
+    <div className="account-switcher">
+      <button
+        className="user-chip user-chip-button"
+        type="button"
+        onClick={onToggle}
+        aria-expanded={open}
+      >
+        <span>{label}</span>
+        <span className="chip-caret">changer</span>
+      </button>
+
+      {open && (
+        <div className="account-menu" role="menu">
+          <div className="account-menu-title">Basculer vers</div>
+          {loading && (
+            <div className="account-menu-empty">Chargement des comptes...</div>
+          )}
+          {!loading && accounts.length === 0 && (
+            <div className="account-menu-empty">Aucun compte approuve.</div>
+          )}
+          {!loading &&
+            accounts.map((user) => (
+              <button
+                key={user.id}
+                className={`account-option ${
+                  user.id === account?.id ? "active" : ""
+                }`}
+                type="button"
+                onClick={() => onSelect(user)}
+                role="menuitem"
+              >
+                <span className="account-name">
+                  {user.name || user.email}
+                </span>
+                <span className="account-meta">
+                  {user.tenupId ? `ID TenUp ${user.tenupId}` : user.email}
+                  {user.role === "admin" ? " - admin" : ""}
+                </span>
+              </button>
+            ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -623,7 +721,11 @@ export default function App() {
   );
   const [authUser, setAuthUser] = useState(() => readStoredUser());
   const [pendingUsers, setPendingUsers] = useState([]);
+  const [approvedUsers, setApprovedUsers] = useState([]);
   const [loadingUsers, setLoadingUsers] = useState(false);
+  const [loadingAccounts, setLoadingAccounts] = useState(false);
+  const [selectedUserId, setSelectedUserId] = useState(null);
+  const [accountMenuOpen, setAccountMenuOpen] = useState(false);
   const [adminFeedback, setAdminFeedback] = useState(null);
   const [now] = useState(() => new Date());
 
@@ -634,6 +736,39 @@ export default function App() {
       Date.parse(authExpiresAt) > Date.now(),
   );
   const isAdminUser = authUser?.role === "admin";
+  const availableAccounts = useMemo(() => {
+    const byId = new Map();
+    approvedUsers.forEach((user) => {
+      if (user?.id) byId.set(user.id, user);
+    });
+    if (authUser?.id) byId.set(authUser.id, authUser);
+
+    return Array.from(byId.values()).sort((a, b) => {
+      if (a.id === authUser?.id) return -1;
+      if (b.id === authUser?.id) return 1;
+      return String(a.name || a.email || "").localeCompare(
+        String(b.name || b.email || ""),
+        "fr",
+      );
+    });
+  }, [approvedUsers, authUser]);
+  const activeUserId = isAdminUser
+    ? selectedUserId || authUser?.id || null
+    : authUser?.id || null;
+  const activeAccount =
+    availableAccounts.find((user) => user.id === activeUserId) || authUser;
+  const scopedApiPath = useCallback(
+    (path) => {
+      const scope =
+        isAdminUser && activeUserId
+          ? `${path.includes("?") ? "&" : "?"}userId=${encodeURIComponent(
+              activeUserId,
+            )}`
+          : "";
+      return `${API}${path}${scope}`;
+    },
+    [activeUserId, isAdminUser],
+  );
 
   useEffect(() => {
     const style = document.createElement("style");
@@ -649,8 +784,49 @@ export default function App() {
       setAuthToken("");
       setAuthExpiresAt("");
       setAuthUser(null);
+      setApprovedUsers([]);
+      setSelectedUserId(null);
+      setAccountMenuOpen(false);
     }
   }, [authToken, authExpiresAt]);
+
+  useEffect(() => {
+    if (!isAdminUser) {
+      setApprovedUsers([]);
+      setSelectedUserId(null);
+      setAccountMenuOpen(false);
+      return;
+    }
+
+    if (!selectedUserId && authUser?.id) {
+      setSelectedUserId(authUser.id);
+      return;
+    }
+
+    if (
+      selectedUserId &&
+      availableAccounts.length > 0 &&
+      !availableAccounts.some((user) => user.id === selectedUserId)
+    ) {
+      setSelectedUserId(authUser?.id || null);
+    }
+  }, [availableAccounts, authUser?.id, isAdminUser, selectedUserId]);
+
+  useEffect(() => {
+    if (!accountMenuOpen) return undefined;
+
+    const closeMenu = (event) => {
+      if (
+        !(event.target instanceof Element) ||
+        !event.target.closest(".account-switcher")
+      ) {
+        setAccountMenuOpen(false);
+      }
+    };
+
+    document.addEventListener("mousedown", closeMenu);
+    return () => document.removeEventListener("mousedown", closeMenu);
+  }, [accountMenuOpen]);
 
   const loadTournois = useCallback(
     async ({ manual = false, silent = false } = {}) => {
@@ -665,7 +841,7 @@ export default function App() {
       setLoadError(null);
 
       try {
-        const res = await fetch(`${API}/tournois`, {
+        const res = await fetch(scopedApiPath("/tournois"), {
           cache: "no-store",
           headers: { Authorization: `Bearer ${authToken}` },
         });
@@ -685,7 +861,7 @@ export default function App() {
         setRefreshing(false);
       }
     },
-    [authToken, isAuthenticated],
+    [authToken, isAuthenticated, scopedApiPath],
   );
 
   const loadPendingUsers = useCallback(async () => {
@@ -719,6 +895,36 @@ export default function App() {
     }
   }, [authToken, isAdminUser, isAuthenticated]);
 
+  const loadApprovedUsers = useCallback(async () => {
+    if (!isAuthenticated || !authToken || !isAdminUser) {
+      setApprovedUsers([]);
+      return;
+    }
+
+    setLoadingAccounts(true);
+    try {
+      const res = await fetch(`${API}/admin/users?status=approved`, {
+        cache: "no-store",
+        headers: { Authorization: `Bearer ${authToken}` },
+      });
+      if (!res.ok) {
+        throw new Error(
+          await readApiError(res, "Impossible de charger les comptes."),
+        );
+      }
+
+      const data = await res.json();
+      setApprovedUsers(Array.isArray(data.users) ? data.users : []);
+    } catch (err) {
+      setAdminFeedback({
+        type: "error",
+        msg: err.message || "Chargement des comptes impossible.",
+      });
+    } finally {
+      setLoadingAccounts(false);
+    }
+  }, [authToken, isAdminUser, isAuthenticated]);
+
   useEffect(() => {
     loadTournois();
   }, [loadTournois]);
@@ -726,6 +932,10 @@ export default function App() {
   useEffect(() => {
     loadPendingUsers();
   }, [loadPendingUsers]);
+
+  useEffect(() => {
+    loadApprovedUsers();
+  }, [loadApprovedUsers]);
 
   useEffect(() => {
     if (!autoPoint) return;
@@ -806,6 +1016,7 @@ export default function App() {
       setAuthToken(data.token);
       setAuthExpiresAt(data.expiresAt);
       setAuthUser(data.user);
+      setSelectedUserId(data.user?.role === "admin" ? data.user.id : null);
       setAuthForm(EMPTY_AUTH_FORM);
       setFeedback({
         type: "success",
@@ -828,6 +1039,9 @@ export default function App() {
     setAuthUser(null);
     setTournois([]);
     setPendingUsers([]);
+    setApprovedUsers([]);
+    setSelectedUserId(null);
+    setAccountMenuOpen(false);
     setAdminFeedback(null);
     setShowForm(false);
     setEditingId(null);
@@ -845,6 +1059,18 @@ export default function App() {
     resetForm();
     setShowForm(true);
     setFeedback(null);
+  };
+
+  const switchAccount = (user) => {
+    if (!user?.id) return;
+    setSelectedUserId(user.id);
+    setAccountMenuOpen(false);
+    setShowForm(false);
+    resetForm();
+    setFeedback({
+      type: "success",
+      msg: `Compte actif : ${user.name || user.email || user.tenupId}.`,
+    });
   };
 
   const startEdit = (tournament) => {
@@ -872,7 +1098,7 @@ export default function App() {
     setDeletingId(tournament.id);
     setFeedback(null);
     try {
-      const res = await fetch(`${API}/tournois/${tournament.id}`, {
+      const res = await fetch(scopedApiPath(`/tournois/${tournament.id}`), {
         method: "DELETE",
         headers: { Authorization: `Bearer ${authToken}` },
       });
@@ -905,6 +1131,7 @@ export default function App() {
         throw new Error(await readApiError(res, "Validation impossible."));
 
       await loadPendingUsers();
+      await loadApprovedUsers();
       setAdminFeedback({
         type: "success",
         msg: `Compte valide pour ${user.name}.`,
@@ -1012,8 +1239,8 @@ export default function App() {
     try {
       const method = editingId ? "PUT" : "POST";
       const url = editingId
-        ? `${API}/tournois/${editingId}`
-        : `${API}/tournois`;
+        ? scopedApiPath(`/tournois/${editingId}`)
+        : scopedApiPath("/tournois");
       const res = await fetch(url, {
         method,
         headers: {
@@ -1099,7 +1326,15 @@ export default function App() {
           >
             {refreshing ? "Actualisation..." : "Rafraichir"}
           </button>
-          <span className="user-chip">{authUser?.name || authUser?.email}</span>
+          <AccountSwitcher
+            account={activeAccount}
+            accounts={availableAccounts}
+            isAdmin={isAdminUser}
+            loading={loadingAccounts}
+            open={accountMenuOpen}
+            onToggle={() => setAccountMenuOpen((open) => !open)}
+            onSelect={switchAccount}
+          />
           <button className="btn-secondary" type="button" onClick={logoutUser}>
             Se deconnecter
           </button>
