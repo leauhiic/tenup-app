@@ -14,7 +14,8 @@ module.exports = function registerSyncRoutes(app, helpers) {
     getDb,
     cleanText,
     findUserByTenupId,
-    findUserByLicence,
+    findSyncOwnerByTenupId,
+    listUserTableTenupIds,
     getDefaultAdminUser,
   } = helpers;
 
@@ -62,7 +63,7 @@ module.exports = function registerSyncRoutes(app, helpers) {
     const errors = [];
 
     rows.forEach((row, index) => {
-      const validation = validateTournoiPayload(row);
+      const validation = validateTournoiPayload({ ...row, manuel: false });
       if (validation.error) {
         errors.push({ index, error: validation.error });
         return;
@@ -93,11 +94,10 @@ module.exports = function registerSyncRoutes(app, helpers) {
     return { values };
   }
 
-  async function resolveImportOwner({ tenupId, licence, source, received }) {
-    const owner =
-      (tenupId ? await findUserByTenupId(tenupId) : null) ||
-      (licence ? await findUserByLicence(licence) : null) ||
-      (tenupId || licence ? null : await getDefaultAdminUser());
+  async function resolveImportOwner({ tenupId, source, received }) {
+    const owner = tenupId
+      ? await (findSyncOwnerByTenupId || findUserByTenupId)(tenupId)
+      : await getDefaultAdminUser();
 
     if (!owner?.id) {
       await recordSyncRun({
@@ -106,17 +106,17 @@ module.exports = function registerSyncRoutes(app, helpers) {
         received,
         imported: 0,
         skipped: received,
-        message: tenupId || licence
-          ? "Import rejected: unknown TenUp id or licence"
+        message: tenupId
+          ? "Import rejected: unknown TenUp id"
           : "Import rejected: admin account unavailable",
-        details: { tenupId, licence },
+        details: { tenupId },
       });
 
       return {
         response: {
-          status: tenupId || licence ? 404 : 500,
+          status: tenupId ? 404 : 500,
           body: {
-            error: tenupId || licence ? "ID TenUp ou licence inconnu" : "Compte admin indisponible",
+            error: tenupId ? "ID TenUp inconnu" : "Compte admin indisponible",
           },
         },
       };
@@ -130,7 +130,7 @@ module.exports = function registerSyncRoutes(app, helpers) {
         imported: 0,
         skipped: received,
         message: "Import rejected: account pending approval",
-        details: { tenupId, licence, userId: owner.id },
+        details: { tenupId, userId: owner.id },
       });
 
       return {
@@ -179,7 +179,6 @@ module.exports = function registerSyncRoutes(app, helpers) {
         replace,
         updated,
         tenupId: owner.tenupId,
-        licence: owner.licence,
         userId: owner.id,
       },
     });
@@ -214,23 +213,7 @@ module.exports = function registerSyncRoutes(app, helpers) {
   app.get("/sync/tenup-ids", async (req, res) => {
     try {
       await ensureTournoisSchema();
-      const result = await getDb().query(`
-        SELECT tenup_id
-        FROM users
-        WHERE approved = true
-          AND tenup_id IS NOT NULL
-          AND tenup_id <> ''
-        ORDER BY role = 'admin' DESC, created_at ASC, id ASC
-      `);
-      const seen = new Set();
-      const tenupIds = result.rows
-        .map((row) => cleanText(row.tenup_id || "", 32).replace(/\s+/g, ""))
-        .filter((tenupId) => /^\d{6,20}$/.test(tenupId))
-        .filter((tenupId) => {
-          if (seen.has(tenupId)) return false;
-          seen.add(tenupId);
-          return true;
-        });
+      const tenupIds = await listUserTableTenupIds();
 
       res.json({ tenupIds, count: tenupIds.length });
     } catch (err) {
@@ -253,14 +236,6 @@ module.exports = function registerSyncRoutes(app, helpers) {
         "",
       32,
     ).replace(/\s+/g, "");
-    const licence = cleanText(
-      body.licence ||
-        body.license ||
-        req.query.licence ||
-        req.query.license ||
-        "",
-      40,
-    ).replace(/\s*\(\d{4}\)\s*$/g, "").replace(/\s+/g, "").toUpperCase();
 
     try {
       await ensureTournoisSchema();
@@ -272,7 +247,6 @@ module.exports = function registerSyncRoutes(app, helpers) {
 
       const ownership = await resolveImportOwner({
         tenupId,
-        licence,
         source,
         received: validation.values.length,
       });
@@ -298,7 +272,7 @@ module.exports = function registerSyncRoutes(app, helpers) {
         imported: 0,
         skipped: Array.isArray(rows) ? rows.length : 0,
         message: err.message,
-        details: { tenupId, licence },
+        details: { tenupId },
       });
       res.status(500).json({ error: err.message });
     }
@@ -313,13 +287,9 @@ module.exports = function registerSyncRoutes(app, helpers) {
       /\s+/g,
       "",
     );
-    const licence = cleanText(body.licence || body.license || "", 40)
-      .replace(/\s*\(\d{4}\)\s*$/g, "")
-      .replace(/\s+/g, "")
-      .toUpperCase();
 
-    if (!tenupId && !licence) {
-      return res.status(400).json({ error: "ID TenUp ou licence requis" });
+    if (!tenupId) {
+      return res.status(400).json({ error: "ID TenUp requis" });
     }
 
     try {
@@ -332,7 +302,6 @@ module.exports = function registerSyncRoutes(app, helpers) {
 
       const ownership = await resolveImportOwner({
         tenupId,
-        licence,
         source,
         received: validation.values.length,
       });
@@ -358,7 +327,7 @@ module.exports = function registerSyncRoutes(app, helpers) {
         imported: 0,
         skipped: Array.isArray(rows) ? rows.length : 0,
         message: err.message,
-        details: { tenupId, licence },
+        details: { tenupId },
       });
       res.status(500).json({ error: err.message });
     }

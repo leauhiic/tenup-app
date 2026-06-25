@@ -49,6 +49,8 @@ La migration appliquee cree :
 - `public.tournois`
 - `public.sync_runs`
 
+La synchronisation Chrome lit les comptes dans `public."User"` et utilise `User.tenupProfileUrl` comme ID TenUp source. `public.users` reste la table technique interne utilisee par cette API pour rattacher les tournois.
+
 Les tables ont RLS active et ne sont pas exposees aux roles `anon`/`authenticated`; l'application y accede via l'API serveur.
 
 Pour copier les donnees Railway vers Supabase :
@@ -75,7 +77,7 @@ Routes :
 - `PUT /tournois/:id` : modifie un tournoi du compte connecte.
 - `DELETE /tournois/:id` : supprime un tournoi du compte connecte.
 - `POST /init-db` : cree/migre la table, requiert admin.
-- `GET /sync/tenup-ids` : liste les IDs TenUp des comptes valides a synchroniser.
+- `GET /sync/tenup-ids` : liste les IDs TenUp des comptes valides de `User` a synchroniser.
 - `POST /tournois/import/tenup` : importe une liste de tournois et la rattache au compte valide qui porte le meme `ID TenUp`.
 - `POST /tournois/import` : importe une liste de tournois sans doublons, route admin legacy.
 - `GET /sync/status` : retourne la derniere synchronisation connue.

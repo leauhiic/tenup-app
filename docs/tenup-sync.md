@@ -5,16 +5,16 @@ TenUp bloque les navigateurs automatises. La synchronisation passe donc par une 
 ## Principe
 
 1. Tu te connectes a TenUp dans ton Chrome habituel.
-2. L'extension recupere les IDs TenUp des comptes valides en base.
+2. L'extension recupere les IDs TenUp des comptes valides dans la table Supabase `User`.
 3. Elle ouvre chaque page classement TenUp depuis cette session, ID par ID.
 4. Elle extrait les resultats detectables.
-5. Elle envoie les resultats avec l'`ID TenUp` en cours ; l'API les rattache au compte valide correspondant. Les imports serveur peuvent aussi etre rattaches par `licence`.
+5. Elle envoie les resultats avec l'`ID TenUp` en cours ; l'API les rattache au compte valide correspondant.
 6. Elle peut relancer une verification automatiquement le 7 du mois si Chrome est ouvert.
 
 ## Pre-requis
 
 - L'API Vercel doit etre redeployee pour exposer `GET /api/sync/tenup-ids` et `POST /api/tournois/import/tenup`.
-- Ton compte dashboard doit etre cree avec le meme `ID TenUp`, et si tu veux le lien avec Padel Manager, avec la meme licence FFT, puis valide par un admin. Pour un compte deja cree, renseigne la licence depuis `Mon profil`.
+- Ton compte doit etre present dans la table Supabase `User`, avec `status = approved` et l'ID TenUp dans `tenupProfileUrl`.
 - Chrome doit etre installe.
 
 ## Installer l'extension
@@ -30,7 +30,7 @@ TenUp bloque les navigateurs automatises. La synchronisation passe donc par une 
 Dans le popup de l'extension :
 
 - `Verifier automatiquement le 7 du mois` : actif si tu veux la verification mensuelle.
-- Le nombre d'IDs TenUp trouves en base s'affiche automatiquement. Il correspond aux comptes valides qui ont un ID TenUp.
+- Le nombre d'IDs TenUp trouves en base s'affiche automatiquement. Il correspond aux comptes valides de `User` qui ont un `tenupProfileUrl`.
 
 Clique ensuite `Enregistrer`.
 
@@ -61,8 +61,8 @@ Limites importantes :
 ## API ajoutee
 
 - `POST /api/tournois/import/tenup` : importe une liste de tournois sans doublons et rattache les lignes au compte valide qui porte le meme `ID TenUp`.
-- `GET /api/sync/tenup-ids` : retourne les IDs TenUp des comptes valides a synchroniser.
-- `POST /api/tournois/import` : route admin serveur a serveur, requiert `x-api-key` ou un jeton admin et peut rattacher par `tenupId` ou par `licence`.
+- `GET /api/sync/tenup-ids` : retourne les IDs TenUp lus dans `User.tenupProfileUrl` pour les comptes `status = approved`.
+- `POST /api/tournois/import` : route admin legacy, requiert `x-api-key` ou un jeton admin.
 - `GET /api/sync/status` : retourne la derniere synchronisation connue.
 
 La route d'import accepte :
@@ -71,13 +71,11 @@ La route d'import accepte :
 {
   "source": "tenup-extension",
   "tenupId": "7146157482",
-  "licence": "123456789",
   "tournois": [
     {
       "date": "2026-05-07",
       "nom": "Tournoi Padel",
       "categorie": "DM",
-      "licence": "123456789",
       "partenaire": "Nom Partenaire",
       "classement": 12,
       "point": 250,

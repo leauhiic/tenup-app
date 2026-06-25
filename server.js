@@ -13,7 +13,6 @@ const ADMIN_TOKEN_SECRET =
 const DEFAULT_ADMIN_EMAIL = process.env.ADMIN_EMAIL || "admin@tenup.local";
 const DEFAULT_ADMIN_NAME = process.env.ADMIN_NAME || "Loic Vossier";
 const DEFAULT_ADMIN_TENUP_ID = process.env.ADMIN_TENUP_ID || "7146157482";
-const DEFAULT_ADMIN_LICENCE = process.env.ADMIN_LICENCE || "";
 const TOKEN_TTL_MS = 12 * 60 * 60 * 1000;
 const PASSWORD_KEYLEN = 32;
 const PASSWORD_ITERATIONS = 120000;
@@ -98,7 +97,6 @@ function createUserToken(user) {
     email: user.email,
     name: user.name || "",
     tenupId: user.tenupId || user.tenup_id || "",
-    licence: user.licence || user.license || "",
     approved: user.approved === true,
     exp: Date.now() + TOKEN_TTL_MS,
   };
@@ -163,7 +161,6 @@ function getOptionalUser(req) {
         name: payload.name || "",
         role: payload.role,
         tenupId: payload.tenupId || "",
-        licence: payload.licence || "",
         approved: true,
       }
     : null;
@@ -227,14 +224,14 @@ function cleanEmail(value) {
 }
 
 function cleanTenupId(value) {
-  return cleanText(value, 32).replace(/\s+/g, "");
-}
+  const text = cleanText(value, 240).replace(/\s+/g, "");
+  if (/^\d{6,20}$/.test(text)) return text;
 
-function cleanLicence(value) {
-  return cleanText(value, 40)
-    .replace(/\s*\(\d{4}\)\s*$/g, "")
-    .replace(/\s+/g, "")
-    .toUpperCase();
+  const classementMatch = text.match(/classement\/(\d{6,20})/i);
+  if (classementMatch) return classementMatch[1];
+
+  const digitMatch = text.match(/\d{6,20}/);
+  return digitMatch ? digitMatch[0] : "";
 }
 
 function validateUserPayload(
@@ -245,7 +242,6 @@ function validateUserPayload(
   const password = typeof payload.password === "string" ? payload.password : "";
   const name = cleanText(payload.name, 80);
   const tenupId = cleanTenupId(payload.tenupId || payload.tenup_id);
-  const licence = cleanLicence(payload.licence || payload.license);
 
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
     return { error: "email is invalid" };
@@ -263,7 +259,7 @@ function validateUserPayload(
     return { error: "tenup id is invalid" };
   }
 
-  return { value: { email, password, name, tenupId, licence } };
+  return { value: { email, password, name, tenupId } };
 }
 
 function hashPassword(
@@ -285,7 +281,6 @@ function validateTournoiPayload(payload = {}, options = {}) {
   const date = parseDateToISO(payload.date);
   const nom = cleanText(payload.nom);
   const categorie = cleanText(payload.categorie, 2).toUpperCase();
-  const licence = cleanLicence(payload.licence || payload.license);
   const partenaire = cleanText(payload.partenaire);
   const classement = parsePositiveInteger(payload.classement);
   const point = parsePositiveInteger(payload.point);
@@ -305,7 +300,6 @@ function validateTournoiPayload(payload = {}, options = {}) {
       date,
       nom,
       categorie,
-      licence,
       partenaire,
       classement,
       point,
@@ -322,13 +316,12 @@ function parseId(value) {
 
 async function insertTournoi(tournoi) {
   await getDb().query(
-    `INSERT INTO tournois (date, nom, categorie, licence, partenaire, classement, point, validite, manuel, user_id)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
+    `INSERT INTO tournois (date, nom, categorie, partenaire, classement, point, validite, manuel, user_id)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
     [
       tournoi.date,
       tournoi.nom,
       tournoi.categorie,
-      tournoi.licence || "",
       tournoi.partenaire,
       tournoi.classement,
       tournoi.point,
@@ -366,13 +359,12 @@ async function findExactTournoi(tournoi, userId = null) {
      WHERE date = $1::date
        AND nom = $2
        AND categorie = $3
-       AND COALESCE(licence, '') = $4
-       AND LOWER(partenaire) = LOWER($5)
-       AND classement = $6
-         AND point = $7
+       AND LOWER(partenaire) = LOWER($4)
+       AND classement = $5
+         AND point = $6
          AND (
-           ($8::integer IS NULL AND user_id IS NULL)
-           OR ($8::integer IS NOT NULL AND user_id = $8::integer)
+           ($7::integer IS NULL AND user_id IS NULL)
+           OR ($7::integer IS NOT NULL AND user_id = $7::integer)
          )
      ORDER BY manuel DESC, id ASC
      LIMIT 1`,
@@ -380,7 +372,6 @@ async function findExactTournoi(tournoi, userId = null) {
       tournoi.date,
       tournoi.nom,
       tournoi.categorie,
-      tournoi.licence || "",
       tournoi.partenaire,
       tournoi.classement,
       tournoi.point,
@@ -398,14 +389,13 @@ async function findManualTournoiMatch(tournoi, userId = null) {
      WHERE manuel = true
        AND date = $1::date
        AND categorie = $2
-       AND COALESCE(licence, '') = $3
-       AND LOWER(partenaire) = LOWER($4)
+       AND LOWER(partenaire) = LOWER($3)
        AND (
-         ($5::integer IS NULL AND user_id IS NULL)
-         OR ($5::integer IS NOT NULL AND user_id = $5::integer)
+         ($4::integer IS NULL AND user_id IS NULL)
+         OR ($4::integer IS NOT NULL AND user_id = $4::integer)
        )
      ORDER BY id ASC`,
-    [tournoi.date, tournoi.categorie, tournoi.licence || "", tournoi.partenaire, userId],
+    [tournoi.date, tournoi.categorie, tournoi.partenaire, userId],
   );
 
   if (result.rows.length === 1) return result.rows[0];
@@ -420,23 +410,20 @@ async function updateTournoiFromImport(id, tournoi) {
      SET date = $1,
          nom = $2,
          categorie = $3,
-         licence = $4,
-         partenaire = $5,
-         classement = $6,
-         point = $7,
-         validite = $8,
-         manuel = $9
-     WHERE id = $10`,
+         partenaire = $4,
+         classement = $5,
+         point = $6,
+         validite = $7,
+         manuel = false
+     WHERE id = $8`,
     [
       tournoi.date,
       tournoi.nom,
       tournoi.categorie,
-      tournoi.licence || "",
       tournoi.partenaire,
       tournoi.classement,
       tournoi.point,
       tournoi.validite,
-      tournoi.manuel === true,
       id,
     ],
   );
@@ -451,7 +438,7 @@ async function insertTournoiIfMissing(tournoi, options = {}) {
   const userId = options.userId || null;
   const row = {
     ...tournoi,
-    manuel: tournoi.manuel === true ? true : imported ? false : false,
+    manuel: imported ? false : tournoi.manuel === true,
   };
 
   const existing = await findExactTournoi(row, userId);
@@ -472,15 +459,14 @@ async function insertTournoiIfMissing(tournoi, options = {}) {
   if (existing) return "skipped";
 
   const result = await getDb().query(
-    `INSERT INTO tournois (date, nom, categorie, licence, partenaire, classement, point, validite, manuel, user_id)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+    `INSERT INTO tournois (date, nom, categorie, partenaire, classement, point, validite, manuel, user_id)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
      ON CONFLICT DO NOTHING
      RETURNING id`,
     [
       row.date,
       row.nom,
       row.categorie,
-      row.licence || "",
       row.partenaire,
       row.classement,
       row.point,
@@ -501,7 +487,6 @@ async function ensureTournoisSchema() {
       date DATE NOT NULL,
       nom TEXT NOT NULL,
       categorie TEXT NOT NULL CHECK (categorie IN ('DM', 'DD', 'DX')),
-      licence TEXT,
       partenaire TEXT NOT NULL,
       classement INTEGER NOT NULL CHECK (classement > 0),
       point INTEGER NOT NULL CHECK (point > 0),
@@ -520,9 +505,6 @@ async function ensureTournoisSchema() {
   `);
   await getDb().query(
     "ALTER TABLE tournois ADD COLUMN IF NOT EXISTS manuel BOOLEAN",
-  );
-  await getDb().query(
-    "ALTER TABLE tournois ADD COLUMN IF NOT EXISTS licence TEXT",
   );
   await getDb().query(
     "ALTER TABLE tournois ADD COLUMN IF NOT EXISTS user_id INTEGER REFERENCES users(id) ON DELETE CASCADE",
@@ -548,11 +530,8 @@ async function ensureTournoisSchema() {
   await getDb().query("ALTER TABLE tournois ALTER COLUMN point SET NOT NULL");
   await getDb().query(`
     CREATE INDEX IF NOT EXISTS tournois_lookup_idx
-    ON tournois (date, categorie, licence, partenaire, classement, point)
+    ON tournois (date, categorie, partenaire, classement, point)
   `);
-  await getDb().query(
-    "CREATE INDEX IF NOT EXISTS tournois_licence_idx ON tournois (licence)",
-  );
   await getDb().query(
     "CREATE INDEX IF NOT EXISTS tournois_user_id_idx ON tournois (user_id)",
   );
@@ -573,7 +552,6 @@ async function ensureUsersSchema() {
       email TEXT NOT NULL UNIQUE,
       name TEXT NOT NULL,
       tenup_id TEXT,
-      licence TEXT,
       password_hash TEXT NOT NULL,
       password_salt TEXT NOT NULL,
       role TEXT NOT NULL DEFAULT 'user',
@@ -585,7 +563,6 @@ async function ensureUsersSchema() {
   await getDb().query(
     "ALTER TABLE users ADD COLUMN IF NOT EXISTS tenup_id TEXT",
   );
-  await getDb().query("ALTER TABLE users ADD COLUMN IF NOT EXISTS licence TEXT");
   await getDb().query("ALTER TABLE users ADD COLUMN IF NOT EXISTS role TEXT");
   await getDb().query(
     "ALTER TABLE users ADD COLUMN IF NOT EXISTS approved BOOLEAN",
@@ -610,11 +587,6 @@ async function ensureUsersSchema() {
     ON users (tenup_id)
     WHERE tenup_id IS NOT NULL AND tenup_id <> ''
   `);
-  await getDb().query(`
-    CREATE UNIQUE INDEX IF NOT EXISTS users_licence_idx
-    ON users (licence)
-    WHERE licence IS NOT NULL AND licence <> ''
-  `);
   await ensureDefaultAdminUser(false);
 }
 
@@ -624,7 +596,6 @@ function serializeUser(row) {
     email: row.email,
     name: row.name,
     tenupId: row.tenup_id || row.tenupId || "",
-    licence: row.licence || row.license || "",
     role: row.role || "user",
     approved: row.approved === true,
     createdAt: row.created_at || row.createdAt || null,
@@ -638,22 +609,20 @@ async function ensureDefaultAdminUser() {
   const email = cleanEmail(DEFAULT_ADMIN_EMAIL);
   const name = cleanText(DEFAULT_ADMIN_NAME, 80) || "Admin";
   const tenupId = cleanTenupId(DEFAULT_ADMIN_TENUP_ID);
-  const licence = cleanLicence(DEFAULT_ADMIN_LICENCE);
   if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return null;
 
   const password = hashPassword(ADMIN_PASSWORD);
   const result = await getDb().query(
-    `INSERT INTO users (email, name, tenup_id, licence, password_hash, password_salt, role, approved, approved_at)
-     VALUES ($1, $2, NULLIF($3, ''), NULLIF($4, ''), $5, $6, 'admin', true, NOW())
+    `INSERT INTO users (email, name, tenup_id, password_hash, password_salt, role, approved, approved_at)
+     VALUES ($1, $2, NULLIF($3, ''), $4, $5, 'admin', true, NOW())
      ON CONFLICT (email) DO UPDATE
        SET name = EXCLUDED.name,
            tenup_id = EXCLUDED.tenup_id,
-           licence = EXCLUDED.licence,
            role = 'admin',
            approved = true,
            approved_at = COALESCE(users.approved_at, NOW())
-     RETURNING id, email, name, tenup_id, licence, role, approved, created_at, approved_at`,
-    [email, name, tenupId, licence, password.hash, password.salt],
+     RETURNING id, email, name, tenup_id, role, approved, created_at, approved_at`,
+    [email, name, tenupId, password.hash, password.salt],
   );
 
   return serializeUser(result.rows[0]);
@@ -663,7 +632,7 @@ async function getDefaultAdminUser() {
   await ensureUsersSchema();
   const email = cleanEmail(DEFAULT_ADMIN_EMAIL);
   const result = await getDb().query(
-    `SELECT id, email, name, tenup_id, licence, role, approved, created_at, approved_at
+    `SELECT id, email, name, tenup_id, role, approved, created_at, approved_at
      FROM users
      WHERE email = $1 AND role = 'admin'
      LIMIT 1`,
@@ -679,7 +648,7 @@ async function findUserByTenupId(value) {
 
   await ensureUsersSchema();
   const result = await getDb().query(
-    `SELECT id, email, name, tenup_id, licence, role, approved, created_at, approved_at
+    `SELECT id, email, name, tenup_id, role, approved, created_at, approved_at
      FROM users
      WHERE tenup_id = $1
      LIMIT 1`,
@@ -689,20 +658,131 @@ async function findUserByTenupId(value) {
   return result.rows[0] ? serializeUser(result.rows[0]) : null;
 }
 
-async function findUserByLicence(value) {
-  const licence = cleanLicence(value);
-  if (!licence) return null;
+function serializeUserTableRow(row) {
+  const firstName = cleanText(row.firstName || row.first_name || "", 80);
+  const lastName = cleanText(row.lastName || row.last_name || "", 80);
+  const name =
+    cleanText(`${firstName} ${lastName}`.trim(), 80) ||
+    cleanText(row.email || "", 80) ||
+    "Utilisateur";
+  const role = cleanText(row.role || "", 40).toLowerCase();
+  const status = cleanText(row.status || "", 40).toLowerCase();
 
-  await ensureUsersSchema();
+  return {
+    externalId: row.id,
+    email: cleanEmail(row.email),
+    name,
+    tenupId: cleanTenupId(row.tenupProfileUrl || row.tenup_profile_url),
+    role: role === "admin" ? "admin" : "user",
+    approved: status === "approved",
+    createdAt: row.createdAt || row.created_at || null,
+  };
+}
+
+async function getUserTableRowByTenupId(value) {
+  const tenupId = cleanTenupId(value);
+  if (!tenupId) return null;
+
   const result = await getDb().query(
-    `SELECT id, email, name, tenup_id, licence, role, approved, created_at, approved_at
-     FROM users
-     WHERE licence = $1
+    `SELECT id, email, "firstName", "lastName", role, status, "tenupProfileUrl", "createdAt"
+     FROM "User"
+     WHERE regexp_replace(COALESCE("tenupProfileUrl", ''), '\\D', '', 'g') = $1
+     ORDER BY role = 'admin' DESC, "createdAt" ASC NULLS LAST, id ASC
      LIMIT 1`,
-    [licence],
+    [tenupId],
   );
 
-  return result.rows[0] ? serializeUser(result.rows[0]) : null;
+  return result.rows[0] ? serializeUserTableRow(result.rows[0]) : null;
+}
+
+async function listUserTableTenupIds() {
+  const result = await getDb().query(`
+    SELECT id, email, "firstName", "lastName", role, status, "tenupProfileUrl", "createdAt"
+    FROM "User"
+    WHERE status = 'approved'
+      AND "tenupProfileUrl" IS NOT NULL
+      AND trim("tenupProfileUrl") <> ''
+    ORDER BY role = 'admin' DESC, "createdAt" ASC NULLS LAST, id ASC
+  `);
+  const seen = new Set();
+
+  return result.rows
+    .map(serializeUserTableRow)
+    .map((user) => user.tenupId)
+    .filter(Boolean)
+    .filter((tenupId) => {
+      if (seen.has(tenupId)) return false;
+      seen.add(tenupId);
+      return true;
+    });
+}
+
+async function ensureInternalUserFromUserTable(externalUser) {
+  if (!externalUser?.tenupId || !externalUser.email) return null;
+
+  await ensureUsersSchema();
+  const existing = await getDb().query(
+    `SELECT id, email, name, tenup_id, role, approved, created_at, approved_at
+     FROM users
+     WHERE tenup_id = $1 OR email = $2
+     ORDER BY tenup_id = $1 DESC, id ASC
+     LIMIT 1`,
+    [externalUser.tenupId, externalUser.email],
+  );
+
+  if (existing.rows[0]) {
+    const result = await getDb().query(
+      `UPDATE users
+       SET email = $1,
+           name = $2,
+           tenup_id = $3,
+           role = $4,
+           approved = $5,
+           approved_at = CASE
+             WHEN $5 = true THEN COALESCE(approved_at, NOW())
+             ELSE approved_at
+           END
+       WHERE id = $6
+       RETURNING id, email, name, tenup_id, role, approved, created_at, approved_at`,
+      [
+        externalUser.email,
+        externalUser.name,
+        externalUser.tenupId,
+        externalUser.role,
+        externalUser.approved,
+        existing.rows[0].id,
+      ],
+    );
+
+    return serializeUser(result.rows[0]);
+  }
+
+  const placeholderPassword = hashPassword(
+    crypto.randomBytes(32).toString("base64url"),
+  );
+  const result = await getDb().query(
+    `INSERT INTO users (email, name, tenup_id, password_hash, password_salt, role, approved, approved_at)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, CASE WHEN $7 = true THEN NOW() ELSE NULL END)
+     RETURNING id, email, name, tenup_id, role, approved, created_at, approved_at`,
+    [
+      externalUser.email,
+      externalUser.name,
+      externalUser.tenupId,
+      placeholderPassword.hash,
+      placeholderPassword.salt,
+      externalUser.role,
+      externalUser.approved,
+    ],
+  );
+
+  return serializeUser(result.rows[0]);
+}
+
+async function findSyncOwnerByTenupId(value) {
+  const externalUser = await getUserTableRowByTenupId(value);
+  if (externalUser) return ensureInternalUserFromUserTable(externalUser);
+
+  return findUserByTenupId(value);
 }
 
 function getScopeInput(req) {
@@ -737,7 +817,7 @@ async function resolveScopedUser(req) {
 
   await ensureUsersSchema();
   const result = await getDb().query(
-    `SELECT id, email, name, tenup_id, licence, role, approved, created_at, approved_at
+    `SELECT id, email, name, tenup_id, role, approved, created_at, approved_at
      FROM users
      WHERE approved = true
        AND ($1::integer IS NULL OR id = $1::integer)
@@ -781,10 +861,10 @@ app.post("/auth/register", async (req, res) => {
     const user = validation.value;
     const password = hashPassword(user.password);
     const result = await getDb().query(
-      `INSERT INTO users (email, name, tenup_id, licence, password_hash, password_salt, role, approved)
-       VALUES ($1, $2, NULLIF($3, ''), NULLIF($4, ''), $5, $6, 'user', false)
-       RETURNING id, email, name, tenup_id, licence, role, approved, created_at, approved_at`,
-      [user.email, user.name, user.tenupId, user.licence, password.hash, password.salt],
+      `INSERT INTO users (email, name, tenup_id, password_hash, password_salt, role, approved)
+       VALUES ($1, $2, $3, $4, $5, 'user', false)
+       RETURNING id, email, name, tenup_id, role, approved, created_at, approved_at`,
+      [user.email, user.name, user.tenupId, password.hash, password.salt],
     );
     const createdUser = serializeUser(result.rows[0]);
 
@@ -798,7 +878,7 @@ app.post("/auth/register", async (req, res) => {
       return res
         .status(409)
         .json({
-          error: "Un compte existe deja avec cet email, cet ID TenUp ou cette licence",
+          error: "Un compte existe deja avec cet email ou cet ID TenUp",
         });
     }
 
@@ -817,7 +897,7 @@ app.post("/auth/login", async (req, res) => {
     await ensureUsersSchema();
     const credentials = validation.value;
     const result = await getDb().query(
-      "SELECT id, email, name, tenup_id, licence, role, approved, password_hash, password_salt, created_at, approved_at FROM users WHERE email = $1",
+      "SELECT id, email, name, tenup_id, role, approved, password_hash, password_salt, created_at, approved_at FROM users WHERE email = $1",
       [credentials.email],
     );
     const user = result.rows[0];
@@ -855,58 +935,12 @@ app.get("/auth/me", requireUser, (req, res) => {
   res.json({ user: req.user });
 });
 
-app.patch("/auth/me", requireUser, async (req, res) => {
-  const name = cleanText(req.body?.name || "", 80);
-  const tenupId = cleanTenupId(req.body?.tenupId || req.body?.tenup_id || "");
-  const licence = cleanLicence(req.body?.licence || req.body?.license || "");
-
-  if (!name) {
-    return res.status(400).json({ error: "name is required" });
-  }
-  if (tenupId && !/^\d{6,20}$/.test(tenupId)) {
-    return res.status(400).json({ error: "tenup id is invalid" });
-  }
-
-  try {
-    await ensureUsersSchema();
-    const result = await getDb().query(
-      `UPDATE users
-       SET name = $1,
-           tenup_id = NULLIF($2, ''),
-           licence = NULLIF($3, '')
-       WHERE id = $4
-       RETURNING id, email, name, tenup_id, licence, role, approved, created_at, approved_at`,
-      [name, tenupId, licence, req.user.id],
-    );
-
-    if (result.rowCount === 0) {
-      return res.status(404).json({ error: "User not found" });
-    }
-
-    const safeUser = serializeUser(result.rows[0]);
-    res.json({
-      user: safeUser,
-      token: createUserToken(safeUser),
-      expiresAt: new Date(Date.now() + TOKEN_TTL_MS).toISOString(),
-    });
-  } catch (err) {
-    if (err.code === "23505") {
-      return res
-        .status(409)
-        .json({ error: "Cet ID TenUp ou cette licence est deja utilise" });
-    }
-
-    console.error(err);
-    res.status(500).json({ error: err.message });
-  }
-});
-
 app.get("/admin/users", requireAdminUser, async (req, res) => {
   try {
     await ensureUsersSchema();
     const status = cleanText(req.query.status || "", 20);
     const result = await getDb().query(
-      `SELECT id, email, name, tenup_id, licence, role, approved, created_at, approved_at
+      `SELECT id, email, name, tenup_id, role, approved, created_at, approved_at
        FROM users
        WHERE
          ($1 = 'pending' AND role <> 'admin' AND approved = false)
@@ -936,7 +970,7 @@ app.post("/admin/users/:id/approve", requireAdminUser, async (req, res) => {
        SET approved = true,
            approved_at = NOW()
        WHERE id = $1 AND role <> 'admin'
-       RETURNING id, email, name, tenup_id, licence, role, approved, created_at, approved_at`,
+       RETURNING id, email, name, tenup_id, role, approved, created_at, approved_at`,
       [id],
     );
 
@@ -980,7 +1014,6 @@ app.get("/tournois", requireUser, async (req, res) => {
         ) AS date,
         nom,
         categorie,
-        licence,
         partenaire,
         classement,
         point,
@@ -1049,14 +1082,13 @@ app.put("/tournois/:id", requireUser, async (req, res) => {
     const t = validation.value;
     const result = await getDb().query(
       `UPDATE tournois
-         SET date = $1, nom = $2, categorie = $3, licence = $4, partenaire = $5, classement = $6, point = $7, validite = $8, manuel = $9, user_id = $10
-         WHERE id = $11
-           AND user_id = $10`,
+         SET date = $1, nom = $2, categorie = $3, partenaire = $4, classement = $5, point = $6, validite = $7, manuel = $8, user_id = $9
+         WHERE id = $10
+           AND user_id = $9`,
       [
         t.date,
         t.nom,
         t.categorie,
-        t.licence || "",
         t.partenaire,
         t.classement,
         t.point,
@@ -1164,7 +1196,8 @@ require("./sync-routes")(app, {
   getDb,
   cleanText,
   findUserByTenupId,
-  findUserByLicence,
+  findSyncOwnerByTenupId,
+  listUserTableTenupIds,
   getDefaultAdminUser,
 });
 

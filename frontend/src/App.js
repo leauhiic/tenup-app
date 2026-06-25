@@ -45,7 +45,6 @@ const EMPTY_FORM = {
   type: "P250",
   tranche: "17-20",
   categorie: "DM",
-  licence: "",
   partenaire: "",
   classement: "",
   point: "",
@@ -57,7 +56,6 @@ const EMPTY_AUTH_FORM = {
   name: "",
   email: "",
   tenupId: "",
-  licence: "",
   password: "",
 };
 
@@ -411,17 +409,6 @@ function AuthScreen({
                   placeholder="ex: 7146157482"
                 />
               </label>
-              <label>
-                Licence FFT
-                <input
-                  name="licence"
-                  value={form.licence}
-                  onChange={onChange}
-                  inputMode="numeric"
-                  autoComplete="off"
-                  placeholder="ex: 123456789"
-                />
-              </label>
             </>
           )}
           <label>
@@ -516,10 +503,7 @@ function AccountSwitcher({
                   {user.name || user.email}
                 </span>
                 <span className="account-meta">
-                  {[
-                    user.tenupId ? `ID TenUp ${user.tenupId}` : "",
-                    user.licence ? `Licence ${user.licence}` : "",
-                  ].filter(Boolean).join(" - ") || user.email}
+                  {user.tenupId ? `ID TenUp ${user.tenupId}` : user.email}
                   {user.role === "admin" ? " - admin" : ""}
                 </span>
               </button>
@@ -582,7 +566,6 @@ function TournamentTable({
             <th>Tournoi</th>
             <th>Statut</th>
             <th>Cat.</th>
-            <th>Licence</th>
             <th>Partenaire</th>
             <th>Classement</th>
             <th>Points</th>
@@ -607,7 +590,6 @@ function TournamentTable({
                 <td>
                   <span className="cat">{t.categorie}</span>
                 </td>
-                <td className="dim">{t.licence || "-"}</td>
                 <td className="dim">{t.partenaire}</td>
                 <td className="dim">{t.classement}e</td>
                 <td>
@@ -681,7 +663,6 @@ function AdminUsersPanel({ users, loading, feedback, onRefresh, onApprove }) {
                 <th>Nom</th>
                 <th>Email</th>
                 <th>ID TenUp</th>
-                <th>Licence</th>
                 <th>Action</th>
               </tr>
             </thead>
@@ -691,7 +672,6 @@ function AdminUsersPanel({ users, loading, feedback, onRefresh, onApprove }) {
                   <td>{user.name}</td>
                   <td className="dim">{user.email}</td>
                   <td className="dim">{user.tenupId}</td>
-                  <td className="dim">{user.licence || "-"}</td>
                   <td>
                     <button
                       className="btn-primary btn-small"
@@ -708,61 +688,6 @@ function AdminUsersPanel({ users, loading, feedback, onRefresh, onApprove }) {
           </table>
         </div>
       )}
-    </section>
-  );
-}
-
-function ProfilePanel({ user, form, saving, feedback, onChange, onSubmit }) {
-  return (
-    <section className="panel">
-      <div className="section-header">
-        <div>
-          <div className="section-title">Mon profil</div>
-          <div className="admin-note">
-            La licence FFT sert a relier automatiquement TenUp App et Padel Manager.
-          </div>
-        </div>
-        <button
-          className="btn-primary btn-small"
-          type="button"
-          onClick={onSubmit}
-          disabled={saving}
-        >
-          {saving ? "Enregistrement..." : "Enregistrer"}
-        </button>
-      </div>
-      {feedback && (
-        <div className={`feedback ${feedback.type}`}>{feedback.msg}</div>
-      )}
-      <div className="form-grid">
-        <label>
-          Nom
-          <input name="name" value={form.name} onChange={onChange} />
-        </label>
-        <label>
-          Email
-          <input value={user?.email || ""} readOnly />
-        </label>
-        <label>
-          ID TenUp
-          <input
-            name="tenupId"
-            value={form.tenupId}
-            onChange={onChange}
-            inputMode="numeric"
-          />
-        </label>
-        <label>
-          Licence FFT
-          <input
-            name="licence"
-            value={form.licence}
-            onChange={onChange}
-            inputMode="numeric"
-            placeholder="ex: 123456789"
-          />
-        </label>
-      </div>
     </section>
   );
 }
@@ -802,13 +727,6 @@ export default function App() {
   const [selectedUserId, setSelectedUserId] = useState(null);
   const [accountMenuOpen, setAccountMenuOpen] = useState(false);
   const [adminFeedback, setAdminFeedback] = useState(null);
-  const [profileForm, setProfileForm] = useState({
-    name: "",
-    tenupId: "",
-    licence: "",
-  });
-  const [profileSaving, setProfileSaving] = useState(false);
-  const [profileFeedback, setProfileFeedback] = useState(null);
   const [now] = useState(() => new Date());
 
   const isAuthenticated = Boolean(
@@ -871,15 +789,6 @@ export default function App() {
       setAccountMenuOpen(false);
     }
   }, [authToken, authExpiresAt]);
-
-  useEffect(() => {
-    setProfileForm({
-      name: authUser?.name || "",
-      tenupId: authUser?.tenupId || "",
-      licence: authUser?.licence || "",
-    });
-    setProfileFeedback(null);
-  }, [authUser?.id, authUser?.name, authUser?.tenupId, authUser?.licence]);
 
   useEffect(() => {
     if (!isAdminUser) {
@@ -1055,7 +964,6 @@ export default function App() {
     const password = authForm.password;
     const name = authForm.name.trim();
     const tenupId = authForm.tenupId.trim();
-    const licence = authForm.licence.trim();
 
     if (
       !email ||
@@ -1075,7 +983,7 @@ export default function App() {
       const endpoint = authMode === "register" ? "register" : "login";
       const payload =
         authMode === "register"
-          ? { name, email, password, tenupId, licence }
+          ? { name, email, password, tenupId }
           : { email, password };
       const res = await fetch(`${API}/auth/${endpoint}`, {
         method: "POST",
@@ -1173,7 +1081,6 @@ export default function App() {
       date: toInputDate(tournament.date),
       nom: tournament.nom || "",
       categorie: tournament.categorie || "DM",
-      licence: tournament.licence || "",
       partenaire: tournament.partenaire || "",
       classement: String(tournament.classement || ""),
       point: String(tournament.point || ""),
@@ -1253,7 +1160,6 @@ export default function App() {
     const matchesSearch =
       !q ||
       t.nom?.toLowerCase().includes(q) ||
-      t.licence?.toLowerCase().includes(q) ||
       t.partenaire?.toLowerCase().includes(q);
     return matchesCategory && matchesSearch;
   });
@@ -1345,7 +1251,6 @@ export default function App() {
           date: form.date,
           nom: form.nom,
           categorie: form.categorie,
-          licence: form.licence,
           partenaire: form.partenaire,
           classement: parseInt(form.classement, 10),
           point: parseInt(form.point, 10),
@@ -1387,46 +1292,6 @@ export default function App() {
   const handleAuthChange = (e) => {
     const { name, value } = e.target;
     setAuthForm((f) => ({ ...f, [name]: value }));
-  };
-
-  const handleProfileChange = (e) => {
-    const { name, value } = e.target;
-    setProfileForm((f) => ({ ...f, [name]: value }));
-  };
-
-  const saveProfile = async () => {
-    setProfileSaving(true);
-    setProfileFeedback(null);
-    try {
-      const res = await fetch(`${API}/auth/me`, {
-        method: "PATCH",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${authToken}`,
-        },
-        body: JSON.stringify(profileForm),
-      });
-
-      if (!res.ok)
-        throw new Error(await readApiError(res, "Profil impossible a mettre a jour."));
-
-      const data = await res.json();
-      storeSession(data);
-      setAuthToken(data.token);
-      setAuthExpiresAt(data.expiresAt);
-      setAuthUser(data.user);
-      setApprovedUsers((users) =>
-        users.map((user) => (user.id === data.user.id ? data.user : user)),
-      );
-      setProfileFeedback({ type: "success", msg: "Profil mis a jour." });
-    } catch (err) {
-      setProfileFeedback({
-        type: "error",
-        msg: err.message || "Profil impossible a mettre a jour.",
-      });
-    } finally {
-      setProfileSaving(false);
-    }
   };
 
   if (!isAuthenticated) {
@@ -1512,15 +1377,6 @@ export default function App() {
         </div>
       )}
 
-      <ProfilePanel
-        user={authUser}
-        form={profileForm}
-        saving={profileSaving}
-        feedback={profileFeedback}
-        onChange={handleProfileChange}
-        onSubmit={saveProfile}
-      />
-
       {isAdminUser && (
         <AdminUsersPanel
           users={pendingUsers}
@@ -1588,15 +1444,6 @@ export default function App() {
                   <option key={c}>{c}</option>
                 ))}
               </select>
-            </label>
-            <label>
-              Licence FFT
-              <input
-                name="licence"
-                value={form.licence}
-                onChange={handleChange}
-                placeholder="Licence du joueur"
-              />
             </label>
             <label>
               Partenaire *
