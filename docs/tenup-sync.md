@@ -6,7 +6,7 @@ TenUp bloque les navigateurs automatises. La synchronisation passe donc par une 
 
 1. Tu te connectes a TenUp dans ton Chrome habituel.
 2. L'extension recupere les IDs TenUp des comptes valides dans la table Supabase `User`.
-3. Elle ouvre chaque page classement TenUp depuis cette session, ID par ID.
+3. Elle ouvre les pages classement TenUp depuis cette session, avec un parallele limite a 3 onglets.
 4. Elle extrait les resultats detectables.
 5. Elle envoie les resultats avec l'`ID TenUp` en cours ; l'API les rattache au compte valide correspondant.
 6. Elle peut relancer une verification automatiquement le 7 du mois si Chrome est ouvert.
@@ -44,7 +44,7 @@ Clique ensuite `Enregistrer`.
 6. Clique `Tester le premier ID`.
 7. Si au moins un tournoi est detecte, clique `Synchroniser tous les IDs`.
 
-Si l'import reussit, le popup affiche le nombre d'IDs synchronises, de tournois importes, remplaces et ignores.
+Si l'import reussit, le popup affiche le nombre d'IDs synchronises, de tournois importes, remplaces et ignores, ainsi que la duree totale.
 `Tester le premier ID` ne lance pas d'import ; il sert uniquement a verifier que l'extension voit les donnees TenUp du premier classement.
 
 ## Synchro automatique le 7
@@ -56,6 +56,7 @@ Limites importantes :
 - Chrome doit etre ouvert.
 - L'extension doit etre activee.
 - Si TenUp demande une reconnexion ou un captcha, l'extension ouvrira la page mais tu devras te reconnecter manuellement.
+- La synchro lance jusqu'a 3 onglets TenUp en parallele pour reduire la duree totale.
 - La synchro cloud 100% autonome n'est pas fiable tant que TenUp bloque les navigateurs automatises.
 
 ## API ajoutee

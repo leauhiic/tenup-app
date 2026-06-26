@@ -140,7 +140,7 @@ function renderLastRun(lastRun) {
 
   if (lastRun.ok) {
     setStatus(
-      `Derniere synchro ${date} : ${lastRun.synced || 0}/${lastRun.targets || 0} ID, ${lastRun.imported || 0} importes, ${lastRun.updated || 0} remplaces, ${lastRun.skipped || 0} ignores.`,
+      `Derniere synchro ${date} : ${lastRun.synced || 0}/${lastRun.targets || 0} ID, ${lastRun.imported || 0} importes, ${lastRun.updated || 0} remplaces, ${lastRun.skipped || 0} ignores${formatRunMeta(lastRun)}.`,
       "success",
     );
   } else {
@@ -155,7 +155,7 @@ function renderSyncResult(result) {
   const failed = result.failed || 0;
   const synced = result.synced || 0;
   const targets = result.targets || 0;
-  const base = `${synced}/${targets} ID synchronise(s) : ${result.imported || 0} importes, ${result.updated || 0} remplaces, ${result.skipped || 0} ignores.`;
+  const base = `${synced}/${targets} ID synchronise(s) : ${result.imported || 0} importes, ${result.updated || 0} remplaces, ${result.skipped || 0} ignores${formatRunMeta(result)}.`;
 
   if (!failed) {
     setStatus(base, "success");
@@ -167,6 +167,27 @@ function renderSyncResult(result) {
     ? ` Premier echec ${firstError.personId} : ${firstError.error}`
     : "";
   setStatus(`${base} ${failed} erreur(s).${detail}`, synced ? "warning" : "error");
+}
+
+function formatRunMeta(result = {}) {
+  const parts = [];
+  if (result.durationMs) {
+    parts.push(formatDuration(result.durationMs));
+  }
+  if (result.concurrency > 1) {
+    parts.push(`${result.concurrency} onglets`);
+  }
+
+  return parts.length ? ` en ${parts.join(", ")}` : "";
+}
+
+function formatDuration(durationMs) {
+  const seconds = Math.max(1, Math.round(Number(durationMs || 0) / 1000));
+  if (seconds < 60) return `${seconds}s`;
+
+  const minutes = Math.floor(seconds / 60);
+  const rest = seconds % 60;
+  return rest ? `${minutes}min ${rest}s` : `${minutes}min`;
 }
 
 function sendMessage(message) {

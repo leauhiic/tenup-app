@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "TenUp App Sync",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "description": "Synchronise les resultats TenUp de tous les comptes dashboard lies a un ID TenUp.",
   "permissions": ["alarms", "scripting", "storage", "tabs"],
   "host_permissions": [

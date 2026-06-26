@@ -3,7 +3,9 @@ const DEFAULT_SETTINGS = {
 };
 const API_BASE_URL = "https://tenup-app.vercel.app/api";
 const MONTHLY_ALARM = "monthly-tenup-sync";
-const READ_SETTLE_DELAY_MS = 1200;
+const SYNC_CONCURRENCY = 3;
+const PAGE_READY_TIMEOUT_MS = 15000;
+const READ_SETTLE_DELAY_MS = 450;
 const MISSING_RECEIVER_PATTERN =
   /Receiving end does not exist|Could not establish connection/i;
 
@@ -160,49 +162,41 @@ async function runSync({ automatic }) {
     skipped: 0,
     results: [],
   };
-  let tabId = null;
+  const startedAt = Date.now();
+  const concurrency = Math.min(SYNC_CONCURRENCY, targets.length);
+  let nextIndex = 0;
+  const results = new Array(targets.length);
 
-  for (let index = 0; index < targets.length; index += 1) {
-    const personId = targets[index];
-
-    try {
-      const collection = await collectFromTenUp({
-        active: !automatic && index === 0,
-        personId,
-        tabId,
-      });
-      tabId = collection.tabId || tabId;
-
-      if (!collection.tournois?.length) {
-        throw new Error(
-          "Aucun tournoi detecte sur TenUp. Recharge la page puis relance la synchro.",
-        );
-      }
-
-      const imported = await postImport(personId, collection.tournois);
-      summary.synced += 1;
-      summary.received += imported.received || 0;
-      summary.imported += imported.imported || 0;
-      summary.updated += imported.updated || 0;
-      summary.skipped += imported.skipped || 0;
-      summary.results.push({
-        personId,
-        ok: true,
-        received: imported.received || 0,
-        imported: imported.imported || 0,
-        updated: imported.updated || 0,
-        skipped: imported.skipped || 0,
-        diagnostics: collection.diagnostics,
-      });
-    } catch (err) {
-      summary.failed += 1;
-      summary.results.push({
-        personId,
-        ok: false,
-        error: err.message,
+  async function worker() {
+    while (nextIndex < targets.length) {
+      const index = nextIndex;
+      nextIndex += 1;
+      results[index] = await syncOneTarget({
+        automatic,
+        index,
+        personId: targets[index],
       });
     }
   }
+
+  await Promise.all(Array.from({ length: concurrency }, () => worker()));
+
+  for (const result of results) {
+    if (result.ok) {
+      summary.synced += 1;
+      summary.received += result.received || 0;
+      summary.imported += result.imported || 0;
+      summary.updated += result.updated || 0;
+      summary.skipped += result.skipped || 0;
+    } else {
+      summary.failed += 1;
+    }
+
+    summary.results.push(result);
+  }
+
+  summary.durationMs = Date.now() - startedAt;
+  summary.concurrency = concurrency;
 
   const errors = summary.results
     .filter((result) => !result.ok)
@@ -221,6 +215,41 @@ async function runSync({ automatic }) {
   });
 
   return { ...summary, errors, lastRun };
+}
+
+async function syncOneTarget({ automatic, index, personId }) {
+  try {
+    const collection = await collectFromTenUp({
+      active: !automatic && index === 0,
+      closeWhenDone: automatic || index !== 0,
+      personId,
+      reuseAnyTab: false,
+    });
+
+    if (!collection.tournois?.length) {
+      throw new Error(
+        "Aucun tournoi detecte sur TenUp. Recharge la page puis relance la synchro.",
+      );
+    }
+
+    const imported = await postImport(personId, collection.tournois);
+
+    return {
+      personId,
+      ok: true,
+      received: imported.received || 0,
+      imported: imported.imported || 0,
+      updated: imported.updated || 0,
+      skipped: imported.skipped || 0,
+      diagnostics: collection.diagnostics,
+    };
+  } catch (err) {
+    return {
+      personId,
+      ok: false,
+      error: err.message,
+    };
+  }
 }
 
 async function testReadFirstTarget() {
@@ -247,25 +276,39 @@ async function openFirstTenUpTarget({ active }) {
   };
 }
 
-async function collectFromTenUp({ active, personId, tabId }) {
+async function collectFromTenUp({
+  active,
+  closeWhenDone = false,
+  personId,
+  reuseAnyTab = true,
+  tabId,
+}) {
   const normalizedPersonId = validatePersonId(personId);
   const tab = await openOrFindTenUpTab(normalizedPersonId, {
     active,
+    reuseAnyTab,
     tabId,
   });
-  await waitForTabReady(tab.id, `/classement/${normalizedPersonId}`);
-  await delay(READ_SETTLE_DELAY_MS);
-  const collection = await sendCollectMessage(tab.id, normalizedPersonId);
 
-  if (!collection?.ok) {
-    throw new Error(collection?.error || "Impossible de lire la page TenUp");
+  try {
+    await waitForTabReady(tab.id, `/classement/${normalizedPersonId}`);
+    await delay(READ_SETTLE_DELAY_MS);
+    const collection = await sendCollectMessage(tab.id, normalizedPersonId);
+
+    if (!collection?.ok) {
+      throw new Error(collection?.error || "Impossible de lire la page TenUp");
+    }
+
+    return {
+      ...collection,
+      personId: normalizedPersonId,
+      tabId: tab.id,
+    };
+  } finally {
+    if (closeWhenDone && tab.createdForSync && tab.id) {
+      closeTab(tab.id).catch(() => {});
+    }
   }
-
-  return {
-    ...collection,
-    personId: normalizedPersonId,
-    tabId: tab.id,
-  };
 }
 
 async function sendCollectMessage(tabId, personId) {
@@ -302,13 +345,17 @@ function buildClassementUrl(personId) {
   return `https://tenup.fft.fr/classement/${encodeURIComponent(personId)}/padel`;
 }
 
-async function openOrFindTenUpTab(personId, { active, tabId } = {}) {
+async function openOrFindTenUpTab(
+  personId,
+  { active, reuseAnyTab = true, tabId } = {},
+) {
   const url = buildClassementUrl(personId);
 
   if (tabId) {
     try {
       await getTab(tabId);
-      return updateTab(tabId, { active, url });
+      const tab = await updateTab(tabId, { active, url });
+      return { ...tab, createdForSync: false };
     } catch (err) {
       // The tab may have been closed between two IDs. Fall back to another tab.
     }
@@ -318,18 +365,22 @@ async function openOrFindTenUpTab(personId, { active, tabId } = {}) {
   const classementTab = tabs.find((tab) =>
     tab.url?.includes(`/classement/${personId}`),
   );
-  const tenupTab = tabs.find((item) => item.active) || tabs[0];
+  const tenupTab = reuseAnyTab
+    ? tabs.find((item) => item.active) || tabs[0]
+    : null;
 
   if (classementTab) {
     if (active) await updateTab(classementTab.id, { active: true });
-    return classementTab;
+    return { ...classementTab, createdForSync: false };
   }
 
   if (tenupTab) {
-    return updateTab(tenupTab.id, { active, url });
+    const tab = await updateTab(tenupTab.id, { active, url });
+    return { ...tab, createdForSync: false };
   }
 
-  return createTab({ url, active });
+  const tab = await createTab({ url, active });
+  return { ...tab, createdForSync: true };
 }
 
 function queryTabs(queryInfo) {
@@ -372,9 +423,15 @@ function updateTab(tabId, updateProperties) {
   });
 }
 
+function closeTab(tabId) {
+  return new Promise((resolve) => {
+    chrome.tabs.remove(tabId, () => resolve());
+  });
+}
+
 function waitForTabReady(tabId, expectedUrlPart) {
   return new Promise((resolve) => {
-    const timeout = setTimeout(done, 30000);
+    const timeout = setTimeout(done, PAGE_READY_TIMEOUT_MS);
 
     function done() {
       clearTimeout(timeout);
